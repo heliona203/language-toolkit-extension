@@ -44,3 +44,47 @@ button { padding: 10px 14px; cursor: pointer; }
 .hotkeyRecorder { display: flex; gap: 8px; max-width: 360px; }
 .hotkeyRecorder input { flex: 1; margin-top: 0; }
 .hotkeyRecorder button { flex-shrink: 0; }
+
+
+.lookupSitesHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  max-width: 520px;
+  margin-top: 18px;
+}
+
+.lookupSitesHeader h3 {
+  margin-bottom: 4px;
+}
+
+.lookupSitesHeader .hint {
+  margin-top: 0;
+}
+
+.lookupSites {
+  list-style: none;
+  margin: 10px 0 0;
+  padding: 0;
+  max-width: 520px;
+  border: 1px solid #e4e4e4;
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.lookupSite {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 12px;
+  align-items: center;
+  padding: 12px;
+  background: #fff;
+}
+
+.lookupSite + .lookupSite { border-top: 1px solid #eee; }
+.lookupSite label { margin: 0; }
+.lookupSite small { display: block; color: #555; margin-top: 3px; }
+.lookupSiteControls { display: flex; gap: 6px; }
+.lookupSiteControls button { padding: 6px 10px; }
+.lookupSiteControls button:disabled { cursor: not-allowed; opacity: 0.45; }
