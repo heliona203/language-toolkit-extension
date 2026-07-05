@@ -6,6 +6,7 @@ let currentTermKey = "";
 let currentSentence = null;
 let currentTerm = null;
 let currentClozeAnswers = [];
+let currentClozeRevealHtml = "";
 let awaitingCopy = false;
 let manageFilterText = "";
 const viewState = {}; // key -> { open: boolean }
@@ -176,6 +177,7 @@ async function startNext(options = {}) {
   const cloze = await clozeSentence(sentenceForCloze.text, currentTerm, sentenceForCloze.id);
   if (termSelect.value !== currentTermKey || currentSentence !== sentenceForCloze) return;
   currentClozeAnswers = cloze.answers;
+  currentClozeRevealHtml = cloze.revealHtml;
   sentenceDisplay.innerHTML = cloze.html;
   statusLine.textContent = `${currentTerm.term} · ${currentTerm.status || "new"} · confidence ${Math.round(currentTerm.stats?.confidence || 0)}`;
   answer.focus();
@@ -248,10 +250,12 @@ async function clozeSentence(sentence, term, sentenceId) {
     const matchedAnswers = [...new Set([matchedText, ...answers])];
     const before = escapeHtml(sentence.slice(0, response.match.start));
     const after = escapeHtml(sentence.slice(response.match.end));
-    return { html: `${before}${blank}${after}`, answers: matchedAnswers, sentenceId };
+    const reveal = `<span class="cloze-answer-reveal">${escapeHtml(matchedText)}</span>`;
+    return { html: `${before}${blank}${after}`, revealHtml: `${before}${reveal}${after}`, answers: matchedAnswers, sentenceId };
   }
 
-  return { html: `${blank} — ${safeSentence}`, answers, sentenceId };
+  const reveal = `<span class="cloze-answer-reveal">${escapeHtml(answers[0] || term.term)}</span>`;
+  return { html: `${blank} — ${safeSentence}`, revealHtml: `${reveal} — ${safeSentence}`, answers, sentenceId };
 }
 
 
@@ -267,7 +271,10 @@ async function checkClozeAnswer() {
 
   if (accepted) {
     feedback.innerHTML = exactCorrect ? `<span class="good">Correct.</span>` : `<span class="good">Accepted.</span> Accent form: <span class="warn">${escapeHtml(correct)}</span>`;
-    speak(currentSentence.text, settings.lang);
+    revealClozeAnswer();
+    answer.disabled = true;
+    await speakAsync(currentSentence.text, settings.lang);
+    answer.disabled = false;
 
     if (practiceMode.value === "clozeThenCopy") {
       awaitingCopy = true;
@@ -291,6 +298,10 @@ async function checkCopyAnswer() {
 
   if (accepted) {
     feedback.innerHTML = `<span class="good">Sentence copied correctly.</span>`;
+    revealClozeAnswer();
+    copyBox.disabled = true;
+    await speakAsync(currentSentence.text, settings.lang);
+    copyBox.disabled = false;
     await recordReview(true, "copy");
     startNext();
   } else {
@@ -362,8 +373,16 @@ function updateGraduation(term) {
   else term.status = "new";
 }
 
+function revealClozeAnswer() {
+  if (currentClozeRevealHtml) sentenceDisplay.innerHTML = currentClozeRevealHtml;
+}
+
 function speak(text, lang) {
-  if (!text || !("speechSynthesis" in window)) return;
+  return speakAsync(text, lang);
+}
+
+function speakAsync(text, lang) {
+  if (!text || !("speechSynthesis" in window)) return Promise.resolve();
   window.speechSynthesis.cancel();
   const utterance = new SpeechSynthesisUtterance(text);
   utterance.lang = lang;
@@ -371,7 +390,12 @@ function speak(text, lang) {
   const voices = window.speechSynthesis.getVoices();
   const bestVoice = voices.find(v => v.lang.toLowerCase() === lang.toLowerCase()) || voices.find(v => v.lang.toLowerCase().startsWith(lang.split("-")[0].toLowerCase()));
   if (bestVoice) utterance.voice = bestVoice;
-  window.speechSynthesis.speak(utterance);
+
+  return new Promise(resolve => {
+    utterance.onend = resolve;
+    utterance.onerror = resolve;
+    window.speechSynthesis.speak(utterance);
+  });
 }
 
 function answersMatch(userAnswer, correctAnswer, ignoreAccents) {
