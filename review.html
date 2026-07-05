@@ -8,39 +8,78 @@
 <body>
   <main>
     <header>
-      <div>
-        <h1>Vocab Review</h1>
-        <p>Practice saved sentences as cloze. Correct answers play the full sentence.</p>
+      <div class="titleBlock">
+        <h1>Vocab Toolkit</h1>
+        <p>Practice saved sentences as cloze, or manage your word bank.</p>
       </div>
-      <button id="options">Options</button>
+      <button id="options" class="ghost">Options</button>
     </header>
 
-    <section class="toolbar">
-      <label>Term <select id="termSelect"></select></label>
-      <label>Practice mode
-        <select id="practiceMode">
-          <option value="cloze">Cloze only</option>
-          <option value="clozeThenCopy">Cloze, then copy-type full sentence</option>
-        </select>
-      </label>
-      <button id="start">Start / Next</button>
-      <button id="speak">Speak sentence</button>
+    <nav class="tabs" role="tablist">
+      <button class="tab active" data-tab="practice" role="tab" aria-selected="true">Practice</button>
+      <button class="tab" data-tab="manage" role="tab" aria-selected="false">Manage Vocab</button>
+    </nav>
+
+    <section id="practiceTab" class="tabPanel">
+      <section class="toolbar">
+        <label>Term <select id="termSelect"></select></label>
+        <label>Practice mode
+          <select id="practiceMode">
+            <option value="cloze">Cloze only</option>
+            <option value="clozeThenCopy">Cloze, then copy-type full sentence</option>
+          </select>
+        </label>
+        <button id="start">Start / Next</button>
+        <button id="speak" class="ghost">🔊 Speak sentence</button>
+      </section>
+
+      <section id="card" class="card hidden">
+        <div id="statusLine" class="statusLine"></div>
+        <p id="sentenceDisplay"></p>
+        <input id="answer" type="text" autocomplete="off" spellcheck="false" placeholder="Type the missing word, then press Enter">
+        <textarea id="copyBox" class="hidden" placeholder="Now type the full sentence, then press Ctrl/Command+Enter"></textarea>
+        <div id="feedback"></div>
+      </section>
+
+      <section id="emptyPractice" class="empty hidden">
+        <p>No vocab saved yet. Switch to <strong>Manage Vocab</strong> to add a term, or save sentences while browsing.</p>
+      </section>
+
+      <section class="stats">
+        <div class="statsHeader">
+          <h2>Terms</h2>
+          <label class="row inline"><input id="statsFilter" type="text" placeholder="Filter terms…"></label>
+        </div>
+        <div class="tableWrap">
+          <table>
+            <thead><tr><th>Term</th><th>Sentences</th><th>Status</th><th>Confidence</th><th>Reviewed</th></tr></thead>
+            <tbody id="termsTable"></tbody>
+          </table>
+        </div>
+      </section>
     </section>
 
-    <section id="card" class="card hidden">
-      <div id="statusLine"></div>
-      <p id="sentenceDisplay"></p>
-      <input id="answer" type="text" autocomplete="off" spellcheck="false" placeholder="Type the missing word, then press Enter">
-      <textarea id="copyBox" class="hidden" placeholder="Now type the full sentence, then press Ctrl/Command+Enter"></textarea>
-      <div id="feedback"></div>
-    </section>
+    <section id="manageTab" class="tabPanel hidden">
+      <section class="manageToolbar">
+        <input id="manageSearch" type="text" placeholder="Search terms or sentences…">
+        <button id="addTermBtn">+ Add term</button>
+      </section>
 
-    <section class="stats">
-      <h2>Terms</h2>
-      <table>
-        <thead><tr><th>Term</th><th>Sentences</th><th>Status</th><th>Confidence</th><th>Reviewed</th></tr></thead>
-        <tbody id="termsTable"></tbody>
-      </table>
+      <div id="addTermForm" class="addTermForm hidden">
+        <input id="newTermInput" type="text" placeholder="New vocab term…" autocomplete="off">
+        <button id="saveNewTermBtn">Add</button>
+        <button id="cancelNewTermBtn" class="ghost">Cancel</button>
+      </div>
+
+      <section id="emptyManage" class="empty hidden">
+        <p>No vocab terms yet. Add one above to get started.</p>
+      </section>
+
+      <section id="noManageMatches" class="empty hidden">
+        <p>No terms or sentences match your search.</p>
+      </section>
+
+      <div id="vocabList" class="vocabList"></div>
     </section>
   </main>
   <script src="review.js"></script>
