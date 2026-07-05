@@ -589,9 +589,14 @@
     if (hoverCaptureActive || hoverCapturePanel) return;
 
     hoverCaptureActive = true;
-    document.addEventListener("mousemove", onHoverCaptureMouseMove, true);
-    document.addEventListener("click", onHoverCaptureClick, true);
-    document.addEventListener("keydown", onHoverCaptureKeydown, true);
+    // Listen on `window` rather than `document`: capture-phase events reach window
+    // before document, so this fires ahead of other extensions' document-level hover
+    // handlers no matter what order the content scripts were injected in. Combined with
+    // stopPropagation() below, that keeps other extensions (e.g. hover-based tools) from
+    // ever seeing - and overriding - these events while capture mode is armed.
+    window.addEventListener("mousemove", onHoverCaptureMouseMove, true);
+    window.addEventListener("click", onHoverCaptureClick, true);
+    window.addEventListener("keydown", onHoverCaptureKeydown, true);
     document.documentElement.style.cursor = "crosshair";
 
     showToast("Hover to highlight a sentence, click to capture it. Esc to cancel.");
@@ -599,9 +604,9 @@
 
   function stopHoverCapture() {
     hoverCaptureActive = false;
-    document.removeEventListener("mousemove", onHoverCaptureMouseMove, true);
-    document.removeEventListener("click", onHoverCaptureClick, true);
-    document.removeEventListener("keydown", onHoverCaptureKeydown, true);
+    window.removeEventListener("mousemove", onHoverCaptureMouseMove, true);
+    window.removeEventListener("click", onHoverCaptureClick, true);
+    window.removeEventListener("keydown", onHoverCaptureKeydown, true);
     document.documentElement.style.cursor = "";
     clearHoverCaptureHighlight();
   }
@@ -618,6 +623,8 @@
       return;
     }
 
+    event.stopPropagation();
+    event.stopImmediatePropagation();
     highlightRange(sentence.range);
   }
 
@@ -642,6 +649,8 @@
 
   function onHoverCaptureKeydown(event) {
     if (event.key !== "Escape") return;
+    event.stopPropagation();
+    event.stopImmediatePropagation();
     stopHoverCapture();
     hideToast();
     showToast("Sentence capture cancelled.");
@@ -692,7 +701,10 @@
 
   function highlightRange(range) {
     if (!window.Highlight || !CSS.highlights) return;
-    CSS.highlights.set("lt-hover-capture", new Highlight(range));
+    const highlight = new Highlight(range);
+    // Outrank other extensions' overlapping CSS custom highlights so ours renders on top.
+    highlight.priority = 2147483647;
+    CSS.highlights.set("lt-hover-capture", highlight);
   }
 
   function clearHoverCaptureHighlight() {
