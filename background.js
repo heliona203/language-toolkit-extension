@@ -135,6 +135,7 @@ async function saveSentenceRecord(payload) {
       updatedAt: now,
       status: "new",
       selectedByUser: true,
+      forms: [],
       stats: {
         timesReviewed: 0,
         clozeCorrect: 0,
