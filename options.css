@@ -24,7 +24,7 @@ section {
 
 label { display: block; margin: 14px 0; }
 
-select, input[type="number"] {
+select, input[type="number"], input[type="text"], input[type="url"] {
   width: 100%;
   max-width: 360px;
   box-sizing: border-box;
@@ -48,10 +48,10 @@ button { padding: 10px 14px; cursor: pointer; }
 
 .lookupSitesHeader {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
   gap: 16px;
-  max-width: 520px;
+  max-width: 680px;
   margin-top: 18px;
 }
 
@@ -63,11 +63,17 @@ button { padding: 10px 14px; cursor: pointer; }
   margin-top: 0;
 }
 
+.lookupSitesActions {
+  display: flex;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
 .lookupSites {
   list-style: none;
   margin: 10px 0 0;
   padding: 0;
-  max-width: 520px;
+  max-width: 680px;
   border: 1px solid #e4e4e4;
   border-radius: 10px;
   overflow: hidden;
@@ -75,16 +81,22 @@ button { padding: 10px 14px; cursor: pointer; }
 
 .lookupSite {
   display: grid;
-  grid-template-columns: 1fr auto;
+  grid-template-columns: minmax(150px, 1fr) minmax(260px, 2fr) auto;
   gap: 12px;
-  align-items: center;
+  align-items: end;
   padding: 12px;
   background: #fff;
 }
 
 .lookupSite + .lookupSite { border-top: 1px solid #eee; }
 .lookupSite label { margin: 0; }
-.lookupSite small { display: block; color: #555; margin-top: 3px; }
-.lookupSiteControls { display: flex; gap: 6px; }
+.lookupSite label:not(.lookupSiteEnabled) { color: #555; font-size: 13px; }
+.lookupSite input[type="text"], .lookupSite input[type="url"] {
+  display: block;
+  width: 100%;
+  max-width: none;
+}
+.lookupSiteEnabled { align-self: center; }
+.lookupSiteControls { display: flex; gap: 6px; align-items: center; }
 .lookupSiteControls button { padding: 6px 10px; }
 .lookupSiteControls button:disabled { cursor: not-allowed; opacity: 0.45; }

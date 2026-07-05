@@ -86,9 +86,12 @@
       <div class="lookupSitesHeader">
         <div>
           <h3>Search websites</h3>
-          <p class="hint">Choose which websites open for a selected term and set their priority with the arrow buttons.</p>
+          <p class="hint">Add, edit, delete, enable, and reorder search links. Use <code>{term}</code> where the selected term belongs. Optional placeholders: <code>{sourceLang}</code>, <code>{targetLang}</code>, <code>{wordReferencePair}</code>, <code>{lingueePair}</code>.</p>
         </div>
-        <button id="resetLookupSites" type="button">Reset order</button>
+        <div class="lookupSitesActions">
+          <button id="addLookupSite" type="button">Add site</button>
+          <button id="resetLookupSites" type="button">Reset defaults</button>
+        </div>
       </div>
       <ul id="lookupSites" class="lookupSites"></ul>
 

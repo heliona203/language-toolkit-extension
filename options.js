@@ -11,14 +11,9 @@ const DEFAULTS = {
   userLevel: "B1",
   hoverCaptureHotkey: { ctrl: true, shift: true, alt: false, meta: false, code: "KeyK" },
   lookupSites: [
-    { id: "wordReference", enabled: true },
-    { id: "linguee", enabled: true }
+    { id: "wordReference", name: "WordReference", enabled: true, urlTemplate: "https://www.wordreference.com/{wordReferencePair}/{term}" },
+    { id: "linguee", name: "Linguee", enabled: true, urlTemplate: "https://www.linguee.com/{lingueePair}/search?source=auto&query={term}" }
   ]
-};
-
-const LOOKUP_SITE_DETAILS = {
-  wordReference: { name: "WordReference", description: "Dictionary and forum lookup." },
-  linguee: { name: "Linguee", description: "Examples from translated contexts." }
 };
 
 let lookupSitesState = DEFAULTS.lookupSites.map(site => ({ ...site }));
@@ -42,14 +37,14 @@ async function load() {
 
 function normalizeLookupSites(sites) {
   const incoming = Array.isArray(sites) ? sites : [];
-  const knownIds = new Set(DEFAULTS.lookupSites.map(site => site.id));
-  const seenIds = new Set();
   const normalized = [];
+  const seenIds = new Set();
 
   for (const site of incoming) {
-    if (!site?.id || !knownIds.has(site.id) || seenIds.has(site.id)) continue;
-    normalized.push({ id: site.id, enabled: site.enabled !== false });
-    seenIds.add(site.id);
+    const normalizedSite = normalizeLookupSite(site);
+    if (!normalizedSite || seenIds.has(normalizedSite.id)) continue;
+    normalized.push(normalizedSite);
+    seenIds.add(normalizedSite.id);
   }
 
   for (const site of DEFAULTS.lookupSites) {
@@ -59,14 +54,24 @@ function normalizeLookupSites(sites) {
   return normalized;
 }
 
+function normalizeLookupSite(site) {
+  if (!site || typeof site !== "object") return null;
+  const matchingDefault = DEFAULTS.lookupSites.find(defaultSite => defaultSite.id === site.id);
+  const id = String(site.id || crypto.randomUUID()).trim();
+  const name = String(site.name || matchingDefault?.name || "Lookup site").trim();
+  const urlTemplate = String(site.urlTemplate || matchingDefault?.urlTemplate || "").trim();
+  if (!id || !name || !urlTemplate) return null;
+  return { id, name, urlTemplate, enabled: site.enabled !== false };
+}
+
 function renderLookupSites() {
   const list = document.getElementById("lookupSites");
   list.replaceChildren(...lookupSitesState.map((site, index) => {
-    const details = LOOKUP_SITE_DETAILS[site.id];
     const item = document.createElement("li");
     item.className = "lookupSite";
 
-    const label = document.createElement("label");
+    const enabledLabel = document.createElement("label");
+    enabledLabel.className = "lookupSiteEnabled";
     const checkbox = document.createElement("input");
     checkbox.type = "checkbox";
     checkbox.checked = site.enabled;
@@ -74,31 +79,63 @@ function renderLookupSites() {
       lookupSitesState[index] = { ...lookupSitesState[index], enabled: checkbox.checked };
       await saveLookupSites("Search websites saved.");
     });
+    enabledLabel.append(checkbox, document.createTextNode(" Enabled"));
 
-    const name = document.createElement("strong");
-    name.textContent = ` ${details.name}`;
-    const description = document.createElement("small");
-    description.textContent = details.description;
-    label.append(checkbox, name, description);
+    const nameLabel = document.createElement("label");
+    nameLabel.textContent = "Website name";
+    const nameInput = document.createElement("input");
+    nameInput.type = "text";
+    nameInput.value = site.name;
+    nameInput.placeholder = "Website name";
+    nameInput.addEventListener("input", () => {
+      lookupSitesState[index] = { ...lookupSitesState[index], name: nameInput.value };
+    });
+    nameInput.addEventListener("change", async () => {
+      lookupSitesState[index] = { ...lookupSitesState[index], name: nameInput.value.trim() || "Lookup site" };
+      renderLookupSites();
+      await saveLookupSites("Search website updated.");
+    });
+    nameLabel.append(nameInput);
+
+    const urlLabel = document.createElement("label");
+    urlLabel.textContent = "Search URL";
+    const urlInput = document.createElement("input");
+    urlInput.type = "url";
+    urlInput.value = site.urlTemplate;
+    urlInput.placeholder = "https://example.com/search?q={term}";
+    urlInput.addEventListener("input", () => {
+      lookupSitesState[index] = { ...lookupSitesState[index], urlTemplate: urlInput.value };
+    });
+    urlInput.addEventListener("change", async () => {
+      lookupSitesState[index] = { ...lookupSitesState[index], urlTemplate: urlInput.value.trim() };
+      await saveLookupSites("Search website updated.");
+    });
+    urlLabel.append(urlInput);
 
     const controls = document.createElement("div");
     controls.className = "lookupSiteControls";
     const up = document.createElement("button");
     up.type = "button";
     up.textContent = "↑";
-    up.setAttribute("aria-label", `Move ${details.name} up`);
+    up.setAttribute("aria-label", `Move ${site.name} up`);
     up.disabled = index === 0;
     up.addEventListener("click", () => moveLookupSite(index, -1));
 
     const down = document.createElement("button");
     down.type = "button";
     down.textContent = "↓";
-    down.setAttribute("aria-label", `Move ${details.name} down`);
+    down.setAttribute("aria-label", `Move ${site.name} down`);
     down.disabled = index === lookupSitesState.length - 1;
     down.addEventListener("click", () => moveLookupSite(index, 1));
-    controls.append(up, down);
 
-    item.append(label, controls);
+    const remove = document.createElement("button");
+    remove.type = "button";
+    remove.textContent = "Delete";
+    remove.setAttribute("aria-label", `Delete ${site.name}`);
+    remove.addEventListener("click", () => removeLookupSite(index));
+    controls.append(up, down, remove);
+
+    item.append(enabledLabel, nameLabel, urlLabel, controls);
     return item;
   }));
 }
@@ -111,7 +148,25 @@ async function moveLookupSite(index, direction) {
   await saveLookupSites("Search website order saved.");
 }
 
+async function removeLookupSite(index) {
+  lookupSitesState.splice(index, 1);
+  renderLookupSites();
+  await saveLookupSites("Search website deleted.");
+}
+
+async function addLookupSite() {
+  lookupSitesState.push({
+    id: crypto.randomUUID(),
+    name: "New search site",
+    enabled: true,
+    urlTemplate: "https://example.com/search?q={term}"
+  });
+  renderLookupSites();
+  await saveLookupSites("Search website added. Edit its name and URL.");
+}
+
 async function saveLookupSites(message = "Search websites saved.") {
+  lookupSitesState = lookupSitesState.map(normalizeLookupSite).filter(Boolean);
   await chrome.storage.sync.set({ lookupSites: lookupSitesState });
   document.getElementById("status").textContent = message;
 }
@@ -242,6 +297,7 @@ document.querySelectorAll("input, select").forEach(el => {
   if (el.type !== "file") el.addEventListener("change", save);
 });
 document.getElementById("recordHoverCaptureHotkey").addEventListener("click", recordHoverCaptureHotkey);
+document.getElementById("addLookupSite").addEventListener("click", addLookupSite);
 document.getElementById("resetLookupSites").addEventListener("click", resetLookupSites);
 document.getElementById("exportData").addEventListener("click", exportData);
 document.getElementById("importData").addEventListener("change", async (event) => {
