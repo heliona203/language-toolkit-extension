@@ -277,7 +277,7 @@ function findExactDictionaryMatch(sentence, forms) {
 function findWholeTermMatch(sentence, form) {
   const value = cleanTerm(form);
   if (!value) return null;
-  const pattern = `(^|[^\\p{L}\\p{M}'’])(${escapeRegex(value)})(?=$|[^\\p{L}\\p{M}'’])`;
+  const pattern = `(^|[^\\p{L}\\p{M}])(${escapeRegex(value)})(?=$|[^\\p{L}\\p{M}'’])`;
   const match = String(sentence || "").match(new RegExp(pattern, "iu"));
   if (!match) return null;
   const start = (match.index || 0) + match[1].length;
@@ -356,7 +356,7 @@ function findWholeTermMatches(sentence, form) {
   const value = cleanTerm(form);
   if (!value) return [];
 
-  const pattern = `(^|[^\\p{L}\\p{M}'’])(${escapeRegex(value)})(?=$|[^\\p{L}\\p{M}'’])`;
+  const pattern = `(^|[^\\p{L}\\p{M}])(${escapeRegex(value)})(?=$|[^\\p{L}\\p{M}'’])`;
   const regex = new RegExp(pattern, "giu");
   const matches = [];
   let match;
@@ -641,7 +641,7 @@ function normalizeFrenchSurface(value) {
   return cleanTerm(value).toLowerCase().replace(/[’‘]/g, "'");
 }
 
-const FRENCH_CONSTRUCTION_TAIL_STARTERS = new Set(["à", "a", "de", "d'", "du", "des", "en", "sur", "avec", "pour", "dans", "par", "contre", "vers", "chez"]);
+const FRENCH_CONSTRUCTION_TAIL_STARTERS = new Set(["à", "a", "de", "d'", "du", "des", "en", "sur", "avec", "pour", "dans", "par", "contre", "vers", "chez", "entre"]);
 const FRENCH_CONSTRUCTION_MAX_GAP_TOKENS = 4;
 const FRENCH_CONSTRUCTION_MAX_GAP_CHARS = 80;
 
