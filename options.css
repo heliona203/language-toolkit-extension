@@ -40,3 +40,7 @@ button { padding: 10px 14px; cursor: pointer; }
 .hint { color: #555; font-size: 13px; line-height: 1.4; }
 .fileLabel { display: block; margin-top: 12px; }
 .fileLabel input { display: block; margin-top: 6px; }
+
+.hotkeyRecorder { display: flex; gap: 8px; max-width: 360px; }
+.hotkeyRecorder input { flex: 1; margin-top: 0; }
+.hotkeyRecorder button { flex-shrink: 0; }

@@ -34,13 +34,6 @@
         "mac": "Command+Shift+S"
       },
       "description": "Save selected sentence for the current vocab term"
-    },
-    "capture_sentence_by_hover": {
-      "suggested_key": {
-        "default": "Ctrl+Shift+K",
-        "mac": "Command+Shift+K"
-      },
-      "description": "Highlight the sentence under your cursor, click to capture it (remap in chrome://extensions/shortcuts if it clashes with another extension)"
     }
   },
   "content_scripts": [

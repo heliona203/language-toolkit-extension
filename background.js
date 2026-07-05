@@ -14,7 +14,6 @@ const DEFAULTS = {
 chrome.commands.onCommand.addListener(async (command) => {
   if (command === "open_vocab_lookup") await openLookupForSelectedTerm();
   if (command === "save_selected_sentence") await saveSelectedSentenceForPendingTerm();
-  if (command === "capture_sentence_by_hover") await activateHoverCapture();
 });
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
@@ -83,17 +82,6 @@ async function saveSelectedSentenceForPendingTerm() {
     sourceTitle: response.sourceTitle,
     sourceSite: response.sourceSite
   });
-}
-
-async function activateHoverCapture() {
-  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-  if (!tab?.id) return;
-
-  try {
-    await chrome.tabs.sendMessage(tab.id, { type: "ACTIVATE_HOVER_CAPTURE" });
-  } catch {
-    // Content script not present on this page (e.g. chrome:// tab) - nothing to do.
-  }
 }
 
 async function setPendingTerm(term) {
