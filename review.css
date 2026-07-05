@@ -375,6 +375,8 @@ tbody tr:hover { background: var(--surface-alt); }
 
 .vocabCardActions {
   display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
   gap: 6px;
 }
 
@@ -429,6 +431,8 @@ tbody tr:hover { background: var(--surface-alt); }
 
 .sentenceRowActions {
   display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
   gap: 6px;
   flex-shrink: 0;
 }
