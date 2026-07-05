@@ -188,11 +188,17 @@ button.small {
   margin: 0 0 16px;
 }
 
-.cloze-blank {
+.cloze-blank,
+.cloze-answer-reveal {
   display: inline-block;
   min-width: 7em;
   border-bottom: 2px solid var(--accent);
   text-align: center;
+}
+
+.cloze-answer-reveal {
+  color: var(--good);
+  font-weight: 700;
 }
 
 #answer {
