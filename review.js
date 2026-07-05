@@ -9,6 +9,8 @@ let currentClozeAnswers = [];
 let awaitingCopy = false;
 let manageFilterText = "";
 const viewState = {}; // key -> { open: boolean }
+const REVIEW_GAP_UNIT_MS = 24 * 60 * 60 * 1000;
+
 
 const termSelect = document.getElementById("termSelect");
 const practiceMode = document.getElementById("practiceMode");
@@ -32,7 +34,7 @@ const newTermInput = document.getElementById("newTermInput");
 document.getElementById("options").addEventListener("click", () => chrome.runtime.openOptionsPage());
 document.getElementById("start").addEventListener("click", startNext);
 document.getElementById("speak").addEventListener("click", () => { if (currentSentence) speak(currentSentence.text, settings.lang); });
-termSelect.addEventListener("change", () => { currentTermKey = termSelect.value; startNext(); });
+termSelect.addEventListener("change", () => { currentTermKey = termSelect.value; startNext({ preferredKey: currentTermKey }); });
 
 answer.addEventListener("keydown", async (event) => {
   if (event.key !== "Enter") return;
@@ -150,8 +152,9 @@ function renderTable() {
   }
 }
 
-async function startNext() {
-  currentTermKey = termSelect.value;
+async function startNext(options = {}) {
+  currentTermKey = choosePracticeTermKey(options.preferredKey);
+  if (currentTermKey) termSelect.value = currentTermKey;
   currentTerm = vocabTerms[currentTermKey];
 
   if (!currentTerm || !currentTerm.sentences?.length) {
@@ -178,9 +181,48 @@ async function startNext() {
   answer.focus();
 }
 
+function choosePracticeTermKey(preferredKey = null) {
+  if (preferredKey && vocabTerms[preferredKey]?.sentences?.length) return preferredKey;
+
+  const candidates = Object.entries(vocabTerms)
+    .filter(([, term]) => term.sentences?.length)
+    .map(([key, term]) => ({ key, term }))
+    .filter(candidate => candidate.term.status !== "graduated");
+
+  const pool = candidates.length
+    ? candidates
+    : Object.entries(vocabTerms)
+        .filter(([, term]) => term.sentences?.length)
+        .map(([key, term]) => ({ key, term }));
+
+  if (!pool.length) return "";
+
+  const alternatives = pool.filter(candidate => candidate.key !== currentTermKey);
+  return chooseDueItem(alternatives.length ? alternatives : pool, candidate => candidate.term.stats).key;
+}
+
 function chooseSentence(term) {
   const sentences = term.sentences || [];
-  return sentences[Math.floor(Math.random() * sentences.length)];
+  if (sentences.length <= 1) return sentences[0];
+
+  const alternatives = sentences.filter(sentence => sentence.id !== currentSentence?.id);
+  return chooseDueItem(alternatives.length ? alternatives : sentences, sentence => sentence.stats);
+}
+
+function chooseDueItem(items, getStats) {
+  const now = Date.now();
+  return items
+    .map(item => ({ item, priority: reviewPriority(getStats(item), now) + Math.random() * 0.01 }))
+    .sort((a, b) => b.priority - a.priority)[0].item;
+}
+
+function reviewPriority(stats, now) {
+  if (!stats?.lastReviewedAt) return Number.POSITIVE_INFINITY;
+  const gap = Math.max(1, stats.nextEncounterGap || 1) * REVIEW_GAP_UNIT_MS;
+  const elapsed = now - new Date(stats.lastReviewedAt).getTime();
+  const dueRatio = elapsed / gap;
+  const confidencePenalty = (100 - Math.min(100, Math.max(0, stats.confidence || 0))) / 100;
+  return dueRatio + confidencePenalty;
 }
 
 async function clozeSentence(sentence, term, sentenceId) {
