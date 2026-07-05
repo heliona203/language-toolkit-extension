@@ -5,6 +5,7 @@ let settings = {};
 let currentTermKey = "";
 let currentSentence = null;
 let currentTerm = null;
+let currentClozeAnswers = [];
 let awaitingCopy = false;
 let manageFilterText = "";
 const viewState = {}; // key -> { open: boolean }
@@ -179,24 +180,88 @@ function chooseSentence(term) {
 
 function clozeSentence(sentence, term, forms) {
   const safeSentence = escapeHtml(sentence);
+  const blank = `<span class="cloze-blank">&nbsp;</span>`;
+  currentClozeAnswers = [term, ...(forms || [])].filter(Boolean);
   // Longest first so a more specific override (e.g. "aboutissant") wins over
   // a shorter one that might also happen to appear inside it.
   const candidates = [term, ...(forms || [])]
     .filter(Boolean)
-    .sort((a, b) => b.length - a.length)
-    .map(candidate => escapeRegex(escapeHtml(candidate)));
-  const re = new RegExp(candidates.join("|"), "iu");
-  const blank = `<span class="cloze-blank">&nbsp;</span>`;
-  if (re.test(safeSentence)) return safeSentence.replace(re, blank);
+    .sort((a, b) => b.length - a.length);
+  const exactCandidates = candidates.map(candidate => escapeRegex(escapeHtml(candidate)));
+  const re = new RegExp(exactCandidates.join("|"), "iu");
+  if (re.test(safeSentence)) {
+    const exactMatch = String(sentence || "").match(new RegExp(candidates.map(escapeRegex).join("|"), "iu"));
+    if (exactMatch) currentClozeAnswers = [...new Set([exactMatch[0], ...currentClozeAnswers])];
+    return safeSentence.replace(re, blank);
+  }
+
+  const fuzzyMatch = findFuzzyTermMatch(sentence, candidates);
+  if (fuzzyMatch) {
+    const matchedText = sentence.slice(fuzzyMatch.start, fuzzyMatch.end);
+    currentClozeAnswers = [...new Set([matchedText, ...currentClozeAnswers])];
+    const before = escapeHtml(sentence.slice(0, fuzzyMatch.start));
+    const after = escapeHtml(sentence.slice(fuzzyMatch.end));
+    return `${before}${blank}${after}`;
+  }
+
   return `${blank} — ${safeSentence}`;
+}
+
+function findFuzzyTermMatch(sentence, candidates) {
+  const sentenceWords = [...String(sentence || "").matchAll(/\p{L}+(?:[’']\p{L}+)*/gu)];
+  if (!sentenceWords.length) return null;
+
+  for (const candidate of candidates) {
+    const candidateWords = extractFuzzyCandidateWords(candidate);
+    for (const candidateWord of candidateWords) {
+      for (const wordMatch of sentenceWords) {
+        if (fuzzyWordsMatch(candidateWord, wordMatch[0])) {
+          return { start: wordMatch.index, end: wordMatch.index + wordMatch[0].length };
+        }
+      }
+    }
+  }
+
+  return null;
+}
+
+function extractFuzzyCandidateWords(value) {
+  return [...String(value || "").matchAll(/\p{L}+(?:[’']\p{L}+)*/gu)]
+    .map(match => match[0])
+    .filter(word => normalizeFuzzyWord(word).length >= 4);
+}
+
+function fuzzyWordsMatch(a, b) {
+  const left = normalizeFuzzyWord(a);
+  const right = normalizeFuzzyWord(b);
+  if (left.length < 4 || right.length < 4) return false;
+
+  const prefixLength = commonPrefixLength(left, right);
+  const shorterLength = Math.min(left.length, right.length);
+  return prefixLength >= 4 && prefixLength / shorterLength >= 0.7;
+}
+
+function normalizeFuzzyWord(value) {
+  return String(value || "")
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/\p{Diacritic}/gu, "")
+    .replace(/[’‘]/g, "'");
+}
+
+function commonPrefixLength(a, b) {
+  let length = 0;
+  while (length < a.length && length < b.length && a[length] === b[length]) length += 1;
+  return length;
 }
 
 async function checkClozeAnswer() {
   const user = answer.value.trim();
-  const correct = currentTerm.term;
+  const correctAnswers = currentClozeAnswers.length ? currentClozeAnswers : [currentTerm.term];
+  const correct = correctAnswers[0];
 
-  const exactCorrect = answersMatch(user, correct, false);
-  const flexibleCorrect = answersMatch(user, correct, true);
+  const exactCorrect = correctAnswers.some(correctAnswer => answersMatch(user, correctAnswer, false));
+  const flexibleCorrect = correctAnswers.some(correctAnswer => answersMatch(user, correctAnswer, true));
   const strictAccents = settings.accentMode === "strict";
   const accepted = exactCorrect || (!strictAccents && flexibleCorrect);
 
