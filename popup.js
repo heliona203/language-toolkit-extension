@@ -69,6 +69,10 @@ document.getElementById("review").addEventListener("click", () => {
   chrome.tabs.create({ url: chrome.runtime.getURL("review.html") });
 });
 
+document.getElementById("manageVocab").addEventListener("click", () => {
+  chrome.tabs.create({ url: chrome.runtime.getURL("review.html#manage") });
+});
+
 document.getElementById("options").addEventListener("click", () => chrome.runtime.openOptionsPage());
 
 getSettings().then(settings => {
