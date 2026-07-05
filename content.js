@@ -23,10 +23,13 @@
   let hoverCapturePanel = null;
   let hoverCaptureHotkeyHeld = false;
   let hoverCaptureBlockCache = null;
+  let lastPointerX = -1;
+  let lastPointerY = -1;
 
   document.addEventListener("keydown", onGlobalHoverCaptureKeydown, true);
   document.addEventListener("keyup", onGlobalHoverCaptureKeyup, true);
   window.addEventListener("blur", onWindowBlurCancelHoverCaptureHold);
+  document.addEventListener("mousemove", onGlobalPointerTrack, { capture: true, passive: true });
 
   chrome.storage.onChanged.addListener((changes, area) => {
     if (area === "sync" && changes.hoverCaptureHotkey) {
@@ -641,6 +644,11 @@
     }
   }
 
+  function onGlobalPointerTrack(event) {
+    lastPointerX = event.clientX;
+    lastPointerY = event.clientY;
+  }
+
   function onWindowBlurCancelHoverCaptureHold() {
     if (!hoverCaptureHotkeyHeld) return;
 
@@ -660,6 +668,12 @@
     document.addEventListener("keydown", onHoverCaptureKeydown, true);
     document.documentElement.style.cursor = "crosshair";
 
+    // Paint the highlight right away using the cursor's last known position,
+    // so it doesn't take a mouse jiggle after the hotkey to show anything.
+    if (lastPointerX >= 0 && lastPointerY >= 0) {
+      updateHoverCaptureHighlightAt(lastPointerX, lastPointerY);
+    }
+
     showToast("Keep holding your hotkey and hover to highlight a sentence, then click to capture it. Release or Esc to cancel.");
   }
 
@@ -674,12 +688,17 @@
   }
 
   function onHoverCaptureMouseMove(event) {
-    if (event.target.closest("#lt-hover-capture-panel, #inline-cloze-toast, #inline-cloze-floating-button")) {
+    updateHoverCaptureHighlightAt(event.clientX, event.clientY, event.target);
+  }
+
+  function updateHoverCaptureHighlightAt(x, y, target) {
+    const el = target || document.elementFromPoint(x, y);
+    if (el && el.closest("#lt-hover-capture-panel, #inline-cloze-toast, #inline-cloze-floating-button")) {
       clearHoverCaptureHighlight();
       return;
     }
 
-    const sentence = getSentenceAtPoint(event.clientX, event.clientY);
+    const sentence = getSentenceAtPoint(x, y);
     if (!sentence) {
       clearHoverCaptureHighlight();
       return;
