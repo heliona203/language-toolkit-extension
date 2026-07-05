@@ -18,6 +18,8 @@
   let floatingButton = null;
   let toast = null;
   let autoIconTimer = null;
+  let hoverCaptureActive = false;
+  let hoverCapturePanel = null;
 
   init();
 
@@ -72,6 +74,10 @@
 
     if (message.type === "CLEAR_CLOZE") {
       clearCloze();
+    }
+
+    if (message.type === "ACTIVATE_HOVER_CAPTURE") {
+      startHoverCapture();
     }
   });
 
@@ -573,5 +579,255 @@
 
   function escapeRegex(value) {
     return String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  }
+
+  // --- Hover capture: highlight the sentence under the cursor, click it to save. ---
+  // One-shot mode, armed by the "capture_sentence_by_hover" command so it can be bound
+  // to a hotkey that doesn't clash with other extensions' own hover/alt-select shortcuts.
+
+  function startHoverCapture() {
+    if (hoverCaptureActive || hoverCapturePanel) return;
+
+    hoverCaptureActive = true;
+    document.addEventListener("mousemove", onHoverCaptureMouseMove, true);
+    document.addEventListener("click", onHoverCaptureClick, true);
+    document.addEventListener("keydown", onHoverCaptureKeydown, true);
+    document.documentElement.style.cursor = "crosshair";
+
+    showToast("Hover to highlight a sentence, click to capture it. Esc to cancel.");
+  }
+
+  function stopHoverCapture() {
+    hoverCaptureActive = false;
+    document.removeEventListener("mousemove", onHoverCaptureMouseMove, true);
+    document.removeEventListener("click", onHoverCaptureClick, true);
+    document.removeEventListener("keydown", onHoverCaptureKeydown, true);
+    document.documentElement.style.cursor = "";
+    clearHoverCaptureHighlight();
+  }
+
+  function onHoverCaptureMouseMove(event) {
+    if (event.target.closest("#lt-hover-capture-panel, #inline-cloze-toast, #inline-cloze-floating-button")) {
+      clearHoverCaptureHighlight();
+      return;
+    }
+
+    const sentence = getSentenceAtPoint(event.clientX, event.clientY);
+    if (!sentence) {
+      clearHoverCaptureHighlight();
+      return;
+    }
+
+    highlightRange(sentence.range);
+  }
+
+  function onHoverCaptureClick(event) {
+    if (event.target.closest("#lt-hover-capture-panel")) return;
+
+    event.preventDefault();
+    event.stopPropagation();
+    event.stopImmediatePropagation();
+
+    const sentence = getSentenceAtPoint(event.clientX, event.clientY);
+    stopHoverCapture();
+    hideToast();
+
+    if (!sentence || !sentence.text) {
+      showToast("No sentence found there.");
+      return;
+    }
+
+    openHoverCapturePanel(sentence.text, event.clientX, event.clientY);
+  }
+
+  function onHoverCaptureKeydown(event) {
+    if (event.key !== "Escape") return;
+    stopHoverCapture();
+    hideToast();
+    showToast("Sentence capture cancelled.");
+  }
+
+  function getSentenceAtPoint(x, y) {
+    if (!document.caretRangeFromPoint) return null;
+
+    const caretRange = document.caretRangeFromPoint(x, y);
+    if (!caretRange) return null;
+
+    const node = caretRange.startContainer;
+    if (node.nodeType !== Node.TEXT_NODE) return null;
+
+    const parent = node.parentElement;
+    if (!parent || !isVisible(parent)) return null;
+    if (parent.closest("#lt-hover-capture-panel, #inline-cloze-toast, #inline-cloze-floating-button")) return null;
+
+    const text = node.nodeValue || "";
+    if (!text.trim()) return null;
+
+    const bounds = extractSentenceBoundsAtOffset(text, caretRange.startOffset);
+    if (!bounds) return null;
+
+    const range = document.createRange();
+    range.setStart(node, bounds.start);
+    range.setEnd(node, bounds.end);
+
+    return { text: bounds.text, range };
+  }
+
+  function extractSentenceBoundsAtOffset(text, offset) {
+    const regex = /[^.!?。！？]*[.!?。！？]+|[^.!?。！？]+$/gu;
+    let match;
+
+    while ((match = regex.exec(text))) {
+      const start = match.index;
+      const end = start + match[0].length;
+      if (offset >= start && offset <= end) {
+        const trimmed = match[0].trim();
+        if (!trimmed) return null;
+        return { text: trimmed, start, end };
+      }
+    }
+
+    return null;
+  }
+
+  function highlightRange(range) {
+    if (!window.Highlight || !CSS.highlights) return;
+    CSS.highlights.set("lt-hover-capture", new Highlight(range));
+  }
+
+  function clearHoverCaptureHighlight() {
+    if (!window.CSS || !CSS.highlights) return;
+    CSS.highlights.delete("lt-hover-capture");
+  }
+
+  async function openHoverCapturePanel(sentenceText, x, y) {
+    closeHoverCapturePanel();
+
+    const data = await chrome.storage.local.get({ vocabTerms: {}, pendingVocabTerm: "" });
+    const existingTerms = Object.values(data.vocabTerms || {})
+      .map(entry => entry.term)
+      .sort((a, b) => a.localeCompare(b));
+
+    const panel = document.createElement("div");
+    panel.id = "lt-hover-capture-panel";
+
+    const preview = document.createElement("div");
+    preview.className = "lt-hc-sentence";
+    preview.textContent = sentenceText;
+    panel.appendChild(preview);
+
+    const select = document.createElement("select");
+    for (const term of existingTerms) {
+      const option = document.createElement("option");
+      option.value = term;
+      option.textContent = term;
+      select.appendChild(option);
+    }
+    const newOption = document.createElement("option");
+    newOption.value = "__new__";
+    newOption.textContent = "+ New term…";
+    select.appendChild(newOption);
+
+    const newTermInput = document.createElement("input");
+    newTermInput.type = "text";
+    newTermInput.placeholder = "Type a new term";
+
+    if (data.pendingVocabTerm && existingTerms.includes(data.pendingVocabTerm)) {
+      select.value = data.pendingVocabTerm;
+      newTermInput.style.display = "none";
+    } else if (data.pendingVocabTerm) {
+      select.value = "__new__";
+      newTermInput.value = data.pendingVocabTerm;
+    } else if (existingTerms.length) {
+      newTermInput.style.display = "none";
+    } else {
+      select.value = "__new__";
+    }
+
+    select.addEventListener("change", () => {
+      newTermInput.style.display = select.value === "__new__" ? "" : "none";
+    });
+
+    panel.appendChild(select);
+    panel.appendChild(newTermInput);
+
+    const errorBox = document.createElement("div");
+    errorBox.className = "lt-hc-error";
+    errorBox.style.display = "none";
+
+    const actions = document.createElement("div");
+    actions.className = "lt-hc-actions";
+
+    const cancelButton = document.createElement("button");
+    cancelButton.type = "button";
+    cancelButton.textContent = "Cancel";
+    cancelButton.addEventListener("click", () => closeHoverCapturePanel());
+
+    const saveButton = document.createElement("button");
+    saveButton.type = "button";
+    saveButton.className = "lt-hc-save";
+    saveButton.textContent = "Save";
+    saveButton.addEventListener("click", async () => {
+      const term = cleanTermLocally(select.value === "__new__" ? newTermInput.value : select.value);
+      if (!term) {
+        errorBox.textContent = "Enter a term first.";
+        errorBox.style.display = "";
+        return;
+      }
+
+      const result = await chrome.runtime.sendMessage({
+        type: "SAVE_SENTENCE",
+        payload: {
+          term,
+          sentence: sentenceText,
+          sourceUrl: location.href,
+          sourceTitle: document.title,
+          sourceSite: getSourceSite()
+        }
+      });
+
+      if (!result?.ok) {
+        errorBox.textContent = result?.error || "Could not save sentence.";
+        errorBox.style.display = "";
+        return;
+      }
+
+      closeHoverCapturePanel();
+      showToast(`Saved sentence for "${term}".`);
+    });
+
+    actions.appendChild(cancelButton);
+    actions.appendChild(saveButton);
+    panel.appendChild(errorBox);
+    panel.appendChild(actions);
+
+    document.body.appendChild(panel);
+    positionPanel(panel, x, y);
+    document.addEventListener("keydown", onHoverCapturePanelKeydown, true);
+
+    hoverCapturePanel = panel;
+  }
+
+  function positionPanel(panel, x, y) {
+    const rect = panel.getBoundingClientRect();
+    const margin = 12;
+    const left = Math.min(Math.max(x, margin), window.innerWidth - rect.width - margin);
+    const top = Math.min(Math.max(y, margin), window.innerHeight - rect.height - margin);
+    panel.style.left = `${Math.max(left, margin)}px`;
+    panel.style.top = `${Math.max(top, margin)}px`;
+  }
+
+  function onHoverCapturePanelKeydown(event) {
+    if (event.key === "Escape") closeHoverCapturePanel();
+  }
+
+  function closeHoverCapturePanel() {
+    document.removeEventListener("keydown", onHoverCapturePanelKeydown, true);
+    hoverCapturePanel?.remove();
+    hoverCapturePanel = null;
+  }
+
+  function cleanTermLocally(value) {
+    return String(value || "").trim().replace(/\s+/g, " ").slice(0, 120);
   }
 })();
