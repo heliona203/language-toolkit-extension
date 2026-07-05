@@ -22,6 +22,7 @@
   let hoverCaptureActive = false;
   let hoverCapturePanel = null;
   let hoverCaptureHotkeyHeld = false;
+  let hoverCaptureBlockCache = null;
 
   document.addEventListener("keydown", onGlobalHoverCaptureKeydown, true);
   document.addEventListener("keyup", onGlobalHoverCaptureKeyup, true);
@@ -669,6 +670,7 @@
     document.removeEventListener("keydown", onHoverCaptureKeydown, true);
     document.documentElement.style.cursor = "";
     clearHoverCaptureHighlight();
+    hoverCaptureBlockCache = null;
   }
 
   function onHoverCaptureMouseMove(event) {
@@ -712,6 +714,105 @@
     showToast("Sentence capture cancelled.");
   }
 
+  const HOVER_CAPTURE_BLOCK_TAGS = new Set([
+    "P", "LI", "TD", "TH", "DIV", "ARTICLE", "SECTION", "BLOCKQUOTE",
+    "H1", "H2", "H3", "H4", "H5", "H6", "FIGCAPTION", "DD", "DT", "PRE",
+    "SUMMARY", "CAPTION", "MAIN", "ASIDE", "HEADER", "FOOTER", "NAV", "FORM"
+  ]);
+
+  function isHoverCaptureBlockElement(el) {
+    if (!el || el.nodeType !== Node.ELEMENT_NODE) return false;
+    if (HOVER_CAPTURE_BLOCK_TAGS.has(el.tagName)) return true;
+    const display = window.getComputedStyle(el).display;
+    return display === "block" || display === "list-item" || display === "flex" ||
+      display === "grid" || display === "table" || display === "table-cell" ||
+      display === "table-row" || display === "flow-root";
+  }
+
+  // Finds the nearest ancestor that represents a "paragraph"-like unit of text,
+  // walking past inline wrappers (links, spans, bold/italic, etc.) that would
+  // otherwise fragment the sentence across unrelated text nodes.
+  function getHoverCaptureBlock(node) {
+    let el = node.parentElement;
+    while (el && el !== document.body && el !== document.documentElement && !isHoverCaptureBlockElement(el)) {
+      el = el.parentElement;
+    }
+    if (!el || el === document.documentElement) return node.parentElement || document.body;
+    return el;
+  }
+
+  function collectHoverCaptureTextNodes(root) {
+    const walker = document.createTreeWalker(
+      root,
+      NodeFilter.SHOW_TEXT,
+      {
+        acceptNode(node) {
+          const parent = node.parentElement;
+          if (!parent) return NodeFilter.FILTER_REJECT;
+
+          const blockedTags = new Set([
+            "SCRIPT", "STYLE", "TEXTAREA", "INPUT", "SELECT",
+            "OPTION", "CODE", "PRE", "NOSCRIPT", "SVG", "BUTTON"
+          ]);
+
+          if (blockedTags.has(parent.tagName)) return NodeFilter.FILTER_REJECT;
+          if (parent.closest("#lt-hover-capture-panel, #inline-cloze-toast, #inline-cloze-floating-button")) {
+            return NodeFilter.FILTER_REJECT;
+          }
+          if (!node.nodeValue) return NodeFilter.FILTER_REJECT;
+          if (!isVisible(parent)) return NodeFilter.FILTER_REJECT;
+
+          return NodeFilter.FILTER_ACCEPT;
+        }
+      }
+    );
+
+    const nodes = [];
+    let text = "";
+    while (walker.nextNode()) {
+      const current = walker.currentNode;
+      const value = current.nodeValue;
+      nodes.push({ node: current, start: text.length, end: text.length + value.length });
+      text += value;
+    }
+
+    return { nodes, text };
+  }
+
+  function getHoverCaptureBlockInfo(block) {
+    if (hoverCaptureBlockCache && hoverCaptureBlockCache.block === block) {
+      return hoverCaptureBlockCache;
+    }
+    const { nodes, text } = collectHoverCaptureTextNodes(block);
+    hoverCaptureBlockCache = { block, nodes, text };
+    return hoverCaptureBlockCache;
+  }
+
+  function findHoverCaptureGlobalOffset(nodes, targetNode, targetOffset) {
+    for (const entry of nodes) {
+      if (entry.node === targetNode) return entry.start + targetOffset;
+    }
+    return null;
+  }
+
+  function buildHoverCaptureRange(nodes, start, end) {
+    const range = document.createRange();
+    let startSet = false;
+
+    for (const entry of nodes) {
+      if (!startSet && start >= entry.start && start <= entry.end) {
+        range.setStart(entry.node, start - entry.start);
+        startSet = true;
+      }
+      if (startSet && end >= entry.start && end <= entry.end) {
+        range.setEnd(entry.node, end - entry.start);
+        return range;
+      }
+    }
+
+    return null;
+  }
+
   function getSentenceAtPoint(x, y) {
     if (!document.caretRangeFromPoint) return null;
 
@@ -725,17 +826,24 @@
     if (!parent || !isVisible(parent)) return null;
     if (parent.closest("#lt-hover-capture-panel, #inline-cloze-toast, #inline-cloze-floating-button")) return null;
 
-    const text = node.nodeValue || "";
+    const block = getHoverCaptureBlock(node);
+    const { nodes, text } = getHoverCaptureBlockInfo(block);
     if (!text.trim()) return null;
 
-    const bounds = extractSentenceBoundsAtOffset(text, caretRange.startOffset);
-    if (!bounds) return null;
+    const globalOffset = findHoverCaptureGlobalOffset(nodes, node, caretRange.startOffset);
+    if (globalOffset == null) return null;
 
-    const range = document.createRange();
-    range.setStart(node, bounds.start);
-    range.setEnd(node, bounds.end);
+    const bounds = extractSentenceBoundsAtOffset(text, globalOffset);
+    if (bounds) {
+      const range = buildHoverCaptureRange(nodes, bounds.start, bounds.end);
+      if (range) return { text: bounds.text, range };
+    }
 
-    return { text: bounds.text, range };
+    // Couldn't confidently narrow down to a single sentence (e.g. no sentence
+    // punctuation in this block) - fall back to the whole containing node.
+    const fallbackRange = document.createRange();
+    fallbackRange.selectNodeContents(block);
+    return { text: text.trim(), range: fallbackRange };
   }
 
   function extractSentenceBoundsAtOffset(text, offset) {
