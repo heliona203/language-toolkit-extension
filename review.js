@@ -167,7 +167,7 @@ function startNext() {
   copyBox.value = "";
   copyBox.classList.add("hidden");
 
-  sentenceDisplay.innerHTML = clozeSentence(currentSentence.text, currentTerm.term);
+  sentenceDisplay.innerHTML = clozeSentence(currentSentence.text, currentTerm.term, currentTerm.forms);
   statusLine.textContent = `${currentTerm.term} · ${currentTerm.status || "new"} · confidence ${Math.round(currentTerm.stats?.confidence || 0)}`;
   answer.focus();
 }
@@ -177,9 +177,15 @@ function chooseSentence(term) {
   return sentences[Math.floor(Math.random() * sentences.length)];
 }
 
-function clozeSentence(sentence, term) {
+function clozeSentence(sentence, term, forms) {
   const safeSentence = escapeHtml(sentence);
-  const re = new RegExp(escapeRegex(escapeHtml(term)), "iu");
+  // Longest first so a more specific override (e.g. "aboutissant") wins over
+  // a shorter one that might also happen to appear inside it.
+  const candidates = [term, ...(forms || [])]
+    .filter(Boolean)
+    .sort((a, b) => b.length - a.length)
+    .map(candidate => escapeRegex(escapeHtml(candidate)));
+  const re = new RegExp(candidates.join("|"), "iu");
   const blank = `<span class="cloze-blank">&nbsp;</span>`;
   if (re.test(safeSentence)) return safeSentence.replace(re, blank);
   return `${blank} — ${safeSentence}`;
@@ -340,6 +346,7 @@ function commitAddTerm() {
     updatedAt: now,
     status: "new",
     selectedByUser: true,
+    forms: [],
     stats: createStats(),
     sentences: []
   };
@@ -375,6 +382,7 @@ function renameTerm(oldKey, rawNewTerm) {
       const exists = target.sentences.some(s => normalizeWhitespace(s.text) === normalizeWhitespace(sentence.text));
       if (!exists) target.sentences.push(sentence);
     }
+    target.forms = Array.from(new Set([...(target.forms || []), ...(term.forms || [])]));
     target.updatedAt = now;
     delete vocabTerms[oldKey];
     delete viewState[oldKey];
@@ -418,6 +426,14 @@ function resetSentenceProgress(key, id) {
   sentence.stats = createStats();
   term.updatedAt = new Date().toISOString();
   viewState[key] = { open: true };
+  saveAndRefreshAll();
+}
+
+function saveTermForms(key, forms) {
+  const term = vocabTerms[key];
+  if (!term) return;
+  term.forms = forms;
+  term.updatedAt = new Date().toISOString();
   saveAndRefreshAll();
 }
 
@@ -544,6 +560,13 @@ function buildVocabCard(key) {
         <button class="small" data-action="save-rename" type="button">Save</button>
         <button class="small ghost" data-action="cancel-rename" type="button">Cancel</button>
       </div>
+      <div class="formsRow">
+        <div class="formsLabel">Manual forms <span class="hint">— conjugations, plurals, etc. found in captured sentences that the exact matcher won't recognize on its own (comma-separated)</span></div>
+        <div class="formsInputRow">
+          <input type="text" class="formsInput" placeholder="e.g. abouti, aboutit, aboutissant" value="${escapeHtml((term.forms || []).join(", "))}">
+          <button class="small" data-action="save-forms" type="button">Save</button>
+        </div>
+      </div>
       <div class="sentenceList"></div>
       <div class="addSentenceRow">
         <textarea rows="2" placeholder="Add a new sentence for “${escapeHtml(term.term)}”…"></textarea>
@@ -629,6 +652,13 @@ function handleVocabListClick(event) {
     return;
   }
 
+  if (action === "save-forms") {
+    const input = cardEl.querySelector(".formsInput");
+    const forms = input.value.split(",").map(f => cleanTerm(f)).filter(Boolean);
+    saveTermForms(key, forms);
+    return;
+  }
+
   if (action === "delete-term") {
     deleteTerm(key);
     return;
@@ -676,7 +706,8 @@ function applyManageFilter() {
     if (!term) return;
     const matches = !filter
       || term.term.toLowerCase().includes(filter)
-      || (term.sentences || []).some(s => s.text.toLowerCase().includes(filter));
+      || (term.sentences || []).some(s => s.text.toLowerCase().includes(filter))
+      || (term.forms || []).some(f => f.toLowerCase().includes(filter));
     cardEl.classList.toggle("hidden", !matches);
     if (matches) visibleCount += 1;
   });
