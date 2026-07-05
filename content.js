@@ -9,7 +9,8 @@
     audioMode: "sentence",
     accentMode: "flexible",
     foreignLanguageDetection: true,
-    userLevel: "B1"
+    userLevel: "B1",
+    hoverCaptureHotkey: { ctrl: true, shift: true, alt: false, meta: false, code: "KeyK" }
   };
 
   let originalBodyHTML = null;
@@ -20,6 +21,17 @@
   let autoIconTimer = null;
   let hoverCaptureActive = false;
   let hoverCapturePanel = null;
+  let hoverCaptureHotkeyHeld = false;
+
+  document.addEventListener("keydown", onGlobalHoverCaptureKeydown, true);
+  document.addEventListener("keyup", onGlobalHoverCaptureKeyup, true);
+  window.addEventListener("blur", onWindowBlurCancelHoverCaptureHold);
+
+  chrome.storage.onChanged.addListener((changes, area) => {
+    if (area === "sync" && changes.hoverCaptureHotkey) {
+      activeSettings.hoverCaptureHotkey = changes.hoverCaptureHotkey.newValue || DEFAULTS.hoverCaptureHotkey;
+    }
+  });
 
   init();
 
@@ -74,10 +86,6 @@
 
     if (message.type === "CLEAR_CLOZE") {
       clearCloze();
-    }
-
-    if (message.type === "ACTIVATE_HOVER_CAPTURE") {
-      startHoverCapture();
     }
   });
 
@@ -581,9 +589,66 @@
     return String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   }
 
-  // --- Hover capture: highlight the sentence under the cursor, click it to save. ---
-  // One-shot mode, armed by the "capture_sentence_by_hover" command so it can be bound
-  // to a hotkey that doesn't clash with other extensions' own hover/alt-select shortcuts.
+  // --- Hover capture: hold the configured hotkey, hover to highlight the sentence
+  // under the cursor, click it to save. Releasing the hotkey (or Esc) cancels.
+
+  function isEditableTarget(target) {
+    if (!target) return false;
+    if (target.isContentEditable) return true;
+    const tag = target.tagName;
+    return tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT";
+  }
+
+  function matchesHoverCaptureHotkey(event) {
+    const hotkey = activeSettings.hoverCaptureHotkey || DEFAULTS.hoverCaptureHotkey;
+    if (!hotkey || !hotkey.code) return false;
+
+    return event.code === hotkey.code &&
+      event.ctrlKey === Boolean(hotkey.ctrl) &&
+      event.shiftKey === Boolean(hotkey.shift) &&
+      event.altKey === Boolean(hotkey.alt) &&
+      event.metaKey === Boolean(hotkey.meta);
+  }
+
+  function onGlobalHoverCaptureKeydown(event) {
+    if (event.repeat || hoverCaptureHotkeyHeld) return;
+    if (isEditableTarget(event.target)) return;
+    if (!matchesHoverCaptureHotkey(event)) return;
+    if (hoverCaptureActive || hoverCapturePanel) return;
+
+    hoverCaptureHotkeyHeld = true;
+    startHoverCapture();
+  }
+
+  function onGlobalHoverCaptureKeyup(event) {
+    if (!hoverCaptureHotkeyHeld) return;
+
+    const hotkey = activeSettings.hoverCaptureHotkey || DEFAULTS.hoverCaptureHotkey;
+    const releasedMainKey = event.code === hotkey.code;
+    const releasedRequiredModifier =
+      (hotkey.ctrl && !event.ctrlKey) ||
+      (hotkey.shift && !event.shiftKey) ||
+      (hotkey.alt && !event.altKey) ||
+      (hotkey.meta && !event.metaKey);
+
+    if (!releasedMainKey && !releasedRequiredModifier) return;
+
+    hoverCaptureHotkeyHeld = false;
+    if (hoverCaptureActive) {
+      stopHoverCapture();
+      hideToast();
+    }
+  }
+
+  function onWindowBlurCancelHoverCaptureHold() {
+    if (!hoverCaptureHotkeyHeld) return;
+
+    hoverCaptureHotkeyHeld = false;
+    if (hoverCaptureActive) {
+      stopHoverCapture();
+      hideToast();
+    }
+  }
 
   function startHoverCapture() {
     if (hoverCaptureActive || hoverCapturePanel) return;
@@ -594,7 +659,7 @@
     document.addEventListener("keydown", onHoverCaptureKeydown, true);
     document.documentElement.style.cursor = "crosshair";
 
-    showToast("Hover to highlight a sentence, click to capture it. Esc to cancel.");
+    showToast("Keep holding your hotkey and hover to highlight a sentence, then click to capture it. Release or Esc to cancel.");
   }
 
   function stopHoverCapture() {

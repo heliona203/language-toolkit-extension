@@ -87,6 +87,20 @@
     </section>
 
     <section>
+      <h2>Hover-capture hotkey</h2>
+
+      <label>
+        Hold this combo, hover to highlight a sentence, click to capture
+        <div class="hotkeyRecorder">
+          <input id="hoverCaptureHotkeyDisplay" type="text" readonly>
+          <button id="recordHoverCaptureHotkey" type="button">Record</button>
+        </div>
+      </label>
+
+      <p class="hint">This one is press-and-hold, so it's set here instead of <code>chrome://extensions/shortcuts</code> (which only supports single key presses). Release the combo or press Esc to cancel a capture. Default: Ctrl+Shift+K.</p>
+    </section>
+
+    <section>
       <h2>Cloze behavior</h2>
 
       <label>
