@@ -8,7 +8,11 @@ const DEFAULTS = {
   audioMode: "sentence",
   accentMode: "flexible",
   foreignLanguageDetection: true,
-  userLevel: "B1"
+  userLevel: "B1",
+  lookupSites: [
+    { id: "wordReference", enabled: true },
+    { id: "linguee", enabled: true }
+  ]
 };
 
 importScripts("data/fr-lexicon-index.js");
@@ -106,13 +110,45 @@ async function openLookupTabs(term) {
   for (const url of urls) await chrome.tabs.create({ url, active: false });
 }
 
+const LOOKUP_SITE_BUILDERS = {
+  wordReference(encoded, pair) {
+    return pair.wordReference
+      ? `https://www.wordreference.com/${pair.wordReference}/${encoded}`
+      : `https://www.wordreference.com/definition/${encoded}`;
+  },
+  linguee(encoded, pair) {
+    return pair.linguee
+      ? `https://www.linguee.com/${pair.linguee}/search?source=auto&query=${encoded}`
+      : `https://www.linguee.com/search?source=auto&query=${encoded}`;
+  }
+};
+
 function buildLookupUrls(term, settings) {
   const encoded = encodeURIComponent(term);
   const pair = getLanguagePair(settings.lookupSourceLang, settings.lookupTargetLang);
-  return [
-    pair.wordReference ? `https://www.wordreference.com/${pair.wordReference}/${encoded}` : `https://www.wordreference.com/definition/${encoded}`,
-    pair.linguee ? `https://www.linguee.com/${pair.linguee}/search?source=auto&query=${encoded}` : `https://www.linguee.com/search?source=auto&query=${encoded}`
-  ];
+  return normalizeLookupSites(settings.lookupSites)
+    .filter(site => site.enabled && LOOKUP_SITE_BUILDERS[site.id])
+    .map(site => LOOKUP_SITE_BUILDERS[site.id](encoded, pair));
+}
+
+function normalizeLookupSites(sites) {
+  const defaults = DEFAULTS.lookupSites;
+  const incoming = Array.isArray(sites) ? sites : [];
+  const knownIds = new Set(defaults.map(site => site.id));
+  const seenIds = new Set();
+  const orderedKnown = [];
+
+  for (const site of incoming) {
+    if (!site?.id || !knownIds.has(site.id) || seenIds.has(site.id)) continue;
+    orderedKnown.push({ id: site.id, enabled: site.enabled !== false });
+    seenIds.add(site.id);
+  }
+
+  for (const defaultSite of defaults) {
+    if (!seenIds.has(defaultSite.id)) orderedKnown.push({ ...defaultSite });
+  }
+
+  return orderedKnown.length ? orderedKnown : defaults.map(site => ({ ...site }));
 }
 
 function getLanguagePair(source, target) {

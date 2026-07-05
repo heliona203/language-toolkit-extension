@@ -9,8 +9,19 @@ const DEFAULTS = {
   accentMode: "flexible",
   foreignLanguageDetection: true,
   userLevel: "B1",
-  hoverCaptureHotkey: { ctrl: true, shift: true, alt: false, meta: false, code: "KeyK" }
+  hoverCaptureHotkey: { ctrl: true, shift: true, alt: false, meta: false, code: "KeyK" },
+  lookupSites: [
+    { id: "wordReference", enabled: true },
+    { id: "linguee", enabled: true }
+  ]
 };
+
+const LOOKUP_SITE_DETAILS = {
+  wordReference: { name: "WordReference", description: "Dictionary and forum lookup." },
+  linguee: { name: "Linguee", description: "Examples from translated contexts." }
+};
+
+let lookupSitesState = DEFAULTS.lookupSites.map(site => ({ ...site }));
 
 async function load() {
   const settings = await chrome.storage.sync.get(DEFAULTS);
@@ -25,6 +36,90 @@ async function load() {
   document.getElementById("foreignLanguageDetection").checked = Boolean(settings.foreignLanguageDetection);
   document.getElementById("userLevel").value = settings.userLevel;
   document.getElementById("hoverCaptureHotkeyDisplay").value = formatHotkey(settings.hoverCaptureHotkey);
+  lookupSitesState = normalizeLookupSites(settings.lookupSites);
+  renderLookupSites();
+}
+
+function normalizeLookupSites(sites) {
+  const incoming = Array.isArray(sites) ? sites : [];
+  const knownIds = new Set(DEFAULTS.lookupSites.map(site => site.id));
+  const seenIds = new Set();
+  const normalized = [];
+
+  for (const site of incoming) {
+    if (!site?.id || !knownIds.has(site.id) || seenIds.has(site.id)) continue;
+    normalized.push({ id: site.id, enabled: site.enabled !== false });
+    seenIds.add(site.id);
+  }
+
+  for (const site of DEFAULTS.lookupSites) {
+    if (!seenIds.has(site.id)) normalized.push({ ...site });
+  }
+
+  return normalized;
+}
+
+function renderLookupSites() {
+  const list = document.getElementById("lookupSites");
+  list.replaceChildren(...lookupSitesState.map((site, index) => {
+    const details = LOOKUP_SITE_DETAILS[site.id];
+    const item = document.createElement("li");
+    item.className = "lookupSite";
+
+    const label = document.createElement("label");
+    const checkbox = document.createElement("input");
+    checkbox.type = "checkbox";
+    checkbox.checked = site.enabled;
+    checkbox.addEventListener("change", async () => {
+      lookupSitesState[index] = { ...lookupSitesState[index], enabled: checkbox.checked };
+      await saveLookupSites("Search websites saved.");
+    });
+
+    const name = document.createElement("strong");
+    name.textContent = ` ${details.name}`;
+    const description = document.createElement("small");
+    description.textContent = details.description;
+    label.append(checkbox, name, description);
+
+    const controls = document.createElement("div");
+    controls.className = "lookupSiteControls";
+    const up = document.createElement("button");
+    up.type = "button";
+    up.textContent = "↑";
+    up.setAttribute("aria-label", `Move ${details.name} up`);
+    up.disabled = index === 0;
+    up.addEventListener("click", () => moveLookupSite(index, -1));
+
+    const down = document.createElement("button");
+    down.type = "button";
+    down.textContent = "↓";
+    down.setAttribute("aria-label", `Move ${details.name} down`);
+    down.disabled = index === lookupSitesState.length - 1;
+    down.addEventListener("click", () => moveLookupSite(index, 1));
+    controls.append(up, down);
+
+    item.append(label, controls);
+    return item;
+  }));
+}
+
+async function moveLookupSite(index, direction) {
+  const nextIndex = index + direction;
+  if (nextIndex < 0 || nextIndex >= lookupSitesState.length) return;
+  [lookupSitesState[index], lookupSitesState[nextIndex]] = [lookupSitesState[nextIndex], lookupSitesState[index]];
+  renderLookupSites();
+  await saveLookupSites("Search website order saved.");
+}
+
+async function saveLookupSites(message = "Search websites saved.") {
+  await chrome.storage.sync.set({ lookupSites: lookupSitesState });
+  document.getElementById("status").textContent = message;
+}
+
+async function resetLookupSites() {
+  lookupSitesState = DEFAULTS.lookupSites.map(site => ({ ...site }));
+  renderLookupSites();
+  await saveLookupSites("Search websites reset.");
 }
 
 function formatHotkey(hotkey) {
@@ -109,7 +204,8 @@ async function save() {
     audioMode: document.getElementById("audioMode").value,
     accentMode: document.getElementById("accentMode").value,
     foreignLanguageDetection: document.getElementById("foreignLanguageDetection").checked,
-    userLevel: document.getElementById("userLevel").value
+    userLevel: document.getElementById("userLevel").value,
+    lookupSites: lookupSitesState
   };
   await chrome.storage.sync.set(settings);
   document.getElementById("status").textContent = "Saved.";
@@ -146,6 +242,7 @@ document.querySelectorAll("input, select").forEach(el => {
   if (el.type !== "file") el.addEventListener("change", save);
 });
 document.getElementById("recordHoverCaptureHotkey").addEventListener("click", recordHoverCaptureHotkey);
+document.getElementById("resetLookupSites").addEventListener("click", resetLookupSites);
 document.getElementById("exportData").addEventListener("click", exportData);
 document.getElementById("importData").addEventListener("change", async (event) => {
   const file = event.target.files?.[0];
