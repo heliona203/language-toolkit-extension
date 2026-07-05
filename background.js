@@ -11,6 +11,8 @@ const DEFAULTS = {
   userLevel: "B1"
 };
 
+importScripts("data/fr-lexicon-index.js");
+
 chrome.commands.onCommand.addListener(async (command) => {
   if (command === "open_vocab_lookup") await openLookupForSelectedTerm();
   if (command === "save_selected_sentence") await saveSelectedSentenceForPendingTerm();
@@ -396,7 +398,24 @@ function lookupUnimorphInflections(normalizedTerm) {
   // Adapter seam for a future UniMorph dataset or backend API. This local
   // fallback covers common French finite verb and participle variants while
   // preserving phrase tails, e.g. "aboutissent à" -> "aboutit à".
+  const indexedForms = lookupIndexedFrenchForms(normalizedTerm);
+  if (indexedForms.length) return indexedForms;
   return inferFrenchVerbPhraseInflections(normalizedTerm.display);
+}
+
+function lookupIndexedFrenchForms(normalizedTerm) {
+  const index = globalThis.FR_LEXICON_INDEX;
+  if (!index) return [];
+
+  const key = normalizeFrenchSurface(normalizedTerm.display);
+  const lemmas = new Set(index.byForm?.[key] || []);
+  if (index.byLemma?.[key]) lemmas.add(key);
+
+  const forms = [];
+  for (const lemma of lemmas) {
+    forms.push(lemma, ...(index.byLemma?.[lemma] || []));
+  }
+  return mergeUniqueForms(forms);
 }
 
 function inferFrenchNominalPhraseForms(value) {
