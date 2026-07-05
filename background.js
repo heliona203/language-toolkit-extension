@@ -239,6 +239,9 @@ function createLanguageAdapter(lang) {
       const unimorph = findExactDictionaryMatch(sentence, lexicalEntry.unimorphForms || []);
       if (unimorph) return { match: unimorph, source: "unimorph", normalizedTerm };
 
+      const construction = findFrenchConstructionMatch(sentence, term, lexicalEntry);
+      if (construction) return { match: construction, source: "unimorph-construction", normalizedTerm };
+
       return { match: null, source: "none", normalizedTerm };
     }
   };
@@ -278,6 +281,109 @@ function findWholeTermMatch(sentence, form) {
   const start = (match.index || 0) + match[1].length;
   return { text: match[2], start, end: start + match[2].length };
 }
+
+function findFrenchConstructionMatch(sentence, term, lexicalEntry) {
+  const construction = buildFrenchConstruction(term, lexicalEntry);
+  if (!construction) return null;
+
+  const headMatches = findAllWholeTermMatches(sentence, construction.headForms);
+  for (const headMatch of headMatches) {
+    const tailMatch = findNearbyConstructionTail(sentence, headMatch.end, construction.tail);
+    if (tailMatch) {
+      return {
+        ...headMatch,
+        construction: {
+          tail: construction.tail,
+          tailStart: tailMatch.start,
+          tailEnd: tailMatch.end
+        }
+      };
+    }
+  }
+
+  return null;
+}
+
+function buildFrenchConstruction(term, lexicalEntry) {
+  const parts = splitFrenchPhraseHead(term);
+  if (!parts) return null;
+
+  const tail = cleanTerm(parts.tail);
+  if (!isFrenchConstructionTail(tail)) return null;
+
+  const headForms = mergeUniqueForms([
+    parts.head,
+    ...inferFrenchVerbForms(parts.head),
+    ...extractFrenchConstructionHeads(lexicalEntry.unimorphForms || [], tail)
+  ]);
+
+  if (!headForms.length) return null;
+  return { headForms, tail };
+}
+
+function extractFrenchConstructionHeads(forms, tail) {
+  const heads = [];
+  for (const form of forms || []) {
+    const value = cleanTerm(form);
+    if (!value.toLowerCase().endsWith(tail.toLowerCase())) continue;
+    const head = cleanTerm(value.slice(0, -tail.length));
+    if (head) heads.push(head);
+  }
+  return heads;
+}
+
+function isFrenchConstructionTail(tail) {
+  if (!tail) return false;
+  const words = tail.match(/[\p{L}\p{M}'’\-]+/gu) || [];
+  if (!words.length || words.length > 3) return false;
+
+  const first = normalizeFrenchSurface(words[0]);
+  return FRENCH_CONSTRUCTION_TAIL_STARTERS.has(first);
+}
+
+function findAllWholeTermMatches(sentence, forms) {
+  const candidates = mergeUniqueForms(forms).sort((a, b) => b.length - a.length);
+  const matches = [];
+  for (const form of candidates) {
+    matches.push(...findWholeTermMatches(sentence, form));
+  }
+  return matches.sort((a, b) => a.start - b.start || b.text.length - a.text.length);
+}
+
+function findWholeTermMatches(sentence, form) {
+  const value = cleanTerm(form);
+  if (!value) return [];
+
+  const pattern = `(^|[^\\p{L}\\p{M}'’])(${escapeRegex(value)})(?=$|[^\\p{L}\\p{M}'’])`;
+  const regex = new RegExp(pattern, "giu");
+  const matches = [];
+  let match;
+  while ((match = regex.exec(String(sentence || "")))) {
+    const start = (match.index || 0) + match[1].length;
+    matches.push({ text: match[2], start, end: start + match[2].length });
+    if (regex.lastIndex === match.index) regex.lastIndex += 1;
+  }
+  return matches;
+}
+
+function findNearbyConstructionTail(sentence, fromIndex, tail) {
+  const after = String(sentence || "").slice(fromIndex);
+  const tailMatch = findWholeTermMatch(after, tail);
+  if (!tailMatch) return null;
+
+  const gap = after.slice(0, tailMatch.start);
+  if (gap.length > FRENCH_CONSTRUCTION_MAX_GAP_CHARS) return null;
+
+  const gapWords = gap.match(/[\p{L}\p{M}'’\-]+/gu) || [];
+  if (gapWords.length > FRENCH_CONSTRUCTION_MAX_GAP_TOKENS) return null;
+
+  return {
+    start: fromIndex + tailMatch.start,
+    end: fromIndex + tailMatch.end,
+    text: tailMatch.text
+  };
+}
+
 
 function lookupWiktionaryForms(normalizedTerm) {
   // Adapter seam for a future Wiktionary/Wiktextract dataset or backend API.
@@ -515,6 +621,10 @@ function addForms(forms, values) {
 function normalizeFrenchSurface(value) {
   return cleanTerm(value).toLowerCase().replace(/[’‘]/g, "'");
 }
+
+const FRENCH_CONSTRUCTION_TAIL_STARTERS = new Set(["à", "a", "de", "d'", "du", "des", "en", "sur", "avec", "pour", "dans", "par", "contre", "vers", "chez"]);
+const FRENCH_CONSTRUCTION_MAX_GAP_TOKENS = 4;
+const FRENCH_CONSTRUCTION_MAX_GAP_CHARS = 80;
 
 const FRENCH_IRREGULAR_VERBS = {
   être: ["être", "suis", "es", "est", "sommes", "êtes", "sont", "étais", "était", "étions", "étiez", "étaient", "serai", "seras", "sera", "serons", "serez", "seront", "serais", "serait", "serions", "seriez", "seraient", "été"],
