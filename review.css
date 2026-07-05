@@ -1,0 +1,95 @@
+body {
+  margin: 0;
+  background: #f7f7f7;
+  color: #222;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+main {
+  max-width: 960px;
+  margin: 28px auto;
+  padding: 24px;
+  background: white;
+  border-radius: 14px;
+  box-shadow: 0 2px 20px rgba(0,0,0,0.08);
+}
+
+header {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: flex-start;
+}
+
+h1 { margin: 0; }
+
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 12px;
+  margin: 24px 0;
+}
+
+label { display: grid; gap: 4px; }
+select, input, textarea { font: inherit; padding: 8px; }
+button { padding: 9px 12px; cursor: pointer; }
+
+.card {
+  padding: 18px;
+  border: 1px solid #ddd;
+  border-radius: 12px;
+  background: #fffef7;
+}
+
+.hidden { display: none; }
+
+#sentenceDisplay {
+  font-size: 22px;
+  line-height: 1.5;
+}
+
+.cloze-blank {
+  display: inline-block;
+  min-width: 7em;
+  border-bottom: 2px solid #555;
+  text-align: center;
+}
+
+#answer {
+  width: 100%;
+  box-sizing: border-box;
+  margin-top: 12px;
+}
+
+#copyBox {
+  width: 100%;
+  min-height: 90px;
+  box-sizing: border-box;
+  margin-top: 12px;
+}
+
+#feedback {
+  margin-top: 10px;
+  min-height: 24px;
+}
+
+.good { color: #207538; }
+.bad { color: #a10000; }
+.warn {
+  background: rgba(255, 215, 0, 0.55);
+  padding: 1px 3px;
+  border-radius: 4px;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+
+th, td {
+  text-align: left;
+  border-top: 1px solid #eee;
+  padding: 8px;
+}

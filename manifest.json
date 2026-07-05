@@ -1,0 +1,53 @@
+{
+  "manifest_version": 3,
+  "name": "Inline Language Toolkit",
+  "version": "0.4.0",
+  "description": "Inline cloze practice plus vocab sentence collection and review.",
+  "permissions": [
+    "storage",
+    "activeTab",
+    "tabs",
+    "downloads"
+  ],
+  "host_permissions": [
+    "<all_urls>"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "options_page": "options.html",
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "Language Toolkit"
+  },
+  "commands": {
+    "open_vocab_lookup": {
+      "suggested_key": {
+        "default": "Ctrl+Shift+L",
+        "mac": "Command+Shift+L"
+      },
+      "description": "Open selected vocab term in WordReference and Linguee"
+    },
+    "save_selected_sentence": {
+      "suggested_key": {
+        "default": "Ctrl+Shift+S",
+        "mac": "Command+Shift+S"
+      },
+      "description": "Save selected sentence for the current vocab term"
+    }
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "<all_urls>"
+      ],
+      "js": [
+        "content.js"
+      ],
+      "css": [
+        "styles.css"
+      ],
+      "run_at": "document_idle"
+    }
+  ]
+}

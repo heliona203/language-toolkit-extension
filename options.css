@@ -1,0 +1,42 @@
+body {
+  margin: 0;
+  background: #f7f7f7;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  color: #222;
+}
+
+main {
+  max-width: 760px;
+  margin: 32px auto;
+  padding: 24px;
+  background: white;
+  border-radius: 14px;
+  box-shadow: 0 2px 20px rgba(0,0,0,0.08);
+}
+
+h1 { margin-top: 0; }
+
+section {
+  margin: 24px 0;
+  padding-top: 8px;
+  border-top: 1px solid #eee;
+}
+
+label { display: block; margin: 14px 0; }
+
+select, input[type="number"] {
+  width: 100%;
+  max-width: 360px;
+  box-sizing: border-box;
+  margin-top: 5px;
+  padding: 7px;
+}
+
+.radio { display: flex; align-items: flex-start; gap: 10px; }
+.radio small { display: block; margin-top: 3px; color: #555; line-height: 1.35; }
+.row { display: flex; align-items: center; gap: 8px; }
+button { padding: 10px 14px; cursor: pointer; }
+
+.hint { color: #555; font-size: 13px; line-height: 1.4; }
+.fileLabel { display: block; margin-top: 12px; }
+.fileLabel input { display: block; margin-top: 6px; }

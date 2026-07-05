@@ -1,0 +1,48 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Vocab Review</title>
+  <link rel="stylesheet" href="review.css">
+</head>
+<body>
+  <main>
+    <header>
+      <div>
+        <h1>Vocab Review</h1>
+        <p>Practice saved sentences as cloze. Correct answers play the full sentence.</p>
+      </div>
+      <button id="options">Options</button>
+    </header>
+
+    <section class="toolbar">
+      <label>Term <select id="termSelect"></select></label>
+      <label>Practice mode
+        <select id="practiceMode">
+          <option value="cloze">Cloze only</option>
+          <option value="clozeThenCopy">Cloze, then copy-type full sentence</option>
+        </select>
+      </label>
+      <button id="start">Start / Next</button>
+      <button id="speak">Speak sentence</button>
+    </section>
+
+    <section id="card" class="card hidden">
+      <div id="statusLine"></div>
+      <p id="sentenceDisplay"></p>
+      <input id="answer" type="text" autocomplete="off" spellcheck="false" placeholder="Type the missing word, then press Enter">
+      <textarea id="copyBox" class="hidden" placeholder="Now type the full sentence, then press Ctrl/Command+Enter"></textarea>
+      <div id="feedback"></div>
+    </section>
+
+    <section class="stats">
+      <h2>Terms</h2>
+      <table>
+        <thead><tr><th>Term</th><th>Sentences</th><th>Status</th><th>Confidence</th><th>Reviewed</th></tr></thead>
+        <tbody id="termsTable"></tbody>
+      </table>
+    </section>
+  </main>
+  <script src="review.js"></script>
+</body>
+</html>

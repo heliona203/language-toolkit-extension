@@ -1,0 +1,146 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Language Toolkit Options</title>
+  <link rel="stylesheet" href="options.css">
+</head>
+<body>
+  <main>
+    <h1>Language Toolkit Options</h1>
+
+    <section>
+      <h2>Cloze mode</h2>
+
+      <label class="radio">
+        <input type="radio" name="mode" value="normal">
+        <span><strong>Normal</strong><small>Activating immediately creates clozes. On detected foreign-language pages, a bottom-right icon appears for five seconds.</small></span>
+      </label>
+
+      <label class="radio">
+        <input type="radio" name="mode" value="userDriven">
+        <span><strong>User-driven</strong><small>Click words while reading. Then click the persistent bottom-right icon to create selected clozes plus level-relevant extras.</small></span>
+      </label>
+
+      <label class="radio">
+        <input type="radio" name="mode" value="userControlled">
+        <span><strong>User-controlled</strong><small>Click words while reading. Then click the persistent bottom-right icon to create only your selected clozes.</small></span>
+      </label>
+    </section>
+
+    <section>
+      <h2>Language and level</h2>
+
+      <label>
+        Target language
+        <select id="lang">
+          <option value="fr-FR">French</option>
+          <option value="es-ES">Spanish</option>
+          <option value="ja-JP">Japanese</option>
+          <option value="ko-KR">Korean</option>
+          <option value="zh-CN">Chinese Mandarin</option>
+          <option value="de-DE">German</option>
+          <option value="it-IT">Italian</option>
+          <option value="en-US">English</option>
+        </select>
+      </label>
+
+      <label>
+        User vocabulary level
+        <select id="userLevel">
+          <option value="A1">A1</option>
+          <option value="A2">A2</option>
+          <option value="B1">B1</option>
+          <option value="B2">B2</option>
+          <option value="C1">C1</option>
+          <option value="C2">C2</option>
+        </select>
+      </label>
+    </section>
+
+    <section>
+      <h2>Lookup tools</h2>
+
+      <label>
+        Lookup source language
+        <select id="lookupSourceLang">
+          <option value="en">English</option>
+          <option value="fr">French</option>
+          <option value="es">Spanish</option>
+          <option value="it">Italian</option>
+          <option value="de">German</option>
+        </select>
+      </label>
+
+      <label>
+        Lookup target language
+        <select id="lookupTargetLang">
+          <option value="fr">French</option>
+          <option value="en">English</option>
+          <option value="es">Spanish</option>
+          <option value="it">Italian</option>
+          <option value="de">German</option>
+        </select>
+      </label>
+
+      <p class="hint">Hotkeys can be changed at <code>chrome://extensions/shortcuts</code>. Defaults: lookup selected term = Ctrl/Command+Shift+L; save selected sentence = Ctrl/Command+Shift+S.</p>
+    </section>
+
+    <section>
+      <h2>Cloze behavior</h2>
+
+      <label>
+        Extra cloze density
+        <select id="density">
+          <option value="18">Light: about every 18th word</option>
+          <option value="12">Medium: about every 12th word</option>
+          <option value="8">Heavy: about every 8th word</option>
+        </select>
+      </label>
+
+      <label>
+        Minimum word length
+        <input id="minLength" type="number" min="2" max="20">
+      </label>
+
+      <label>
+        Audio on Enter
+        <select id="audioMode">
+          <option value="answer">Speak answer only</option>
+          <option value="sentence">Speak full sentence</option>
+          <option value="both">Speak answer, then sentence</option>
+          <option value="off">Off</option>
+        </select>
+      </label>
+
+      <label>
+        Accent checking
+        <select id="accentMode">
+          <option value="flexible">Flexible: accept missing/wrong accents, but highlight accent fixes in yellow</option>
+          <option value="strict">Strict: missing/wrong accents count as wrong and are highlighted in red</option>
+        </select>
+      </label>
+
+      <label class="row">
+        <input id="foreignLanguageDetection" type="checkbox">
+        Show bottom-right activation icon on likely foreign-language pages
+      </label>
+    </section>
+
+    <section>
+      <h2>Storage</h2>
+      <p class="hint">Saved vocabulary is local to Chrome by default. Export/import keeps a readable backup file that feels more tangible than hidden browser storage.</p>
+      <button id="exportData" type="button">Export vocab JSON</button>
+      <label class="fileLabel">
+        Import vocab JSON
+        <input id="importData" type="file" accept="application/json,.json">
+      </label>
+    </section>
+
+    <button id="save">Save options</button>
+    <p id="status"></p>
+  </main>
+
+  <script src="options.js"></script>
+</body>
+</html>

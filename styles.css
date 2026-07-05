@@ -1,0 +1,110 @@
+.cloze-wrapper {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  vertical-align: baseline;
+}
+
+.cloze-input {
+  font: inherit;
+  width: 7em;
+  min-width: 4em;
+  padding: 1px 4px;
+  margin: 0 1px;
+  border: 1px solid #999;
+  border-radius: 4px;
+  background: #fffef5;
+  color: inherit;
+}
+
+.cloze-input.correct {
+  border-color: #258a3e;
+  background: #ecfff0;
+}
+
+.cloze-input.incorrect {
+  border-color: #b3261e;
+  background: #fff0f0;
+}
+
+.cloze-reveal {
+  font-size: 0.9em;
+  opacity: 0.8;
+  border-bottom: 1px dotted currentColor;
+}
+
+.cloze-replay {
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  font-size: 0.9em;
+  padding: 0 2px;
+}
+
+.cloze-selectable-word {
+  cursor: pointer;
+  border-radius: 3px;
+  padding: 0 1px;
+}
+
+.cloze-selectable-word:hover {
+  outline: 1px dotted currentColor;
+}
+
+.cloze-selected-word {
+  background: rgba(255, 215, 0, 0.45);
+  outline: 1px solid rgba(160, 120, 0, 0.55);
+}
+
+#inline-cloze-floating-button {
+  position: fixed;
+  right: 18px;
+  bottom: 18px;
+  z-index: 2147483647;
+  width: 48px;
+  height: 48px;
+  border-radius: 999px;
+  border: 1px solid rgba(0,0,0,0.2);
+  background: white;
+  box-shadow: 0 3px 18px rgba(0,0,0,0.25);
+  cursor: pointer;
+  font-size: 22px;
+}
+
+#inline-cloze-floating-button:hover {
+  transform: scale(1.04);
+}
+
+#inline-cloze-toast {
+  position: fixed;
+  right: 76px;
+  bottom: 25px;
+  z-index: 2147483647;
+  background: #222;
+  color: white;
+  padding: 8px 10px;
+  border-radius: 8px;
+  font: 13px system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+
+.cloze-accent-feedback {
+  font-size: 0.9em;
+  border-radius: 4px;
+  padding: 0 2px;
+}
+
+.cloze-accent-feedback.flexible {
+  background: rgba(255, 215, 0, 0.55);
+  outline: 1px solid rgba(160, 120, 0, 0.45);
+}
+
+.cloze-accent-feedback.strict {
+  background: rgba(255, 80, 80, 0.28);
+  outline: 1px solid rgba(170, 0, 0, 0.45);
+}
+
+.cloze-accent-note {
+  font-size: 0.82em;
+  opacity: 0.78;
+}
