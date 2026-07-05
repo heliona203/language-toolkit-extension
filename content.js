@@ -22,6 +22,7 @@
   let hoverCaptureActive = false;
   let hoverCapturePanel = null;
   let hoverCaptureHotkeyHeld = false;
+  const hoverCapturePressedKeys = new Set();
   let hoverCaptureBlockCache = null;
   let lastPointerX = -1;
   let lastPointerY = -1;
@@ -603,40 +604,58 @@
     return tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT";
   }
 
-  function matchesHoverCaptureHotkey(event) {
+  function isModifierPressed(name, event) {
+    if (name === "ctrl") return event.ctrlKey || hoverCapturePressedKeys.has("ControlLeft") || hoverCapturePressedKeys.has("ControlRight");
+    if (name === "shift") return event.shiftKey || hoverCapturePressedKeys.has("ShiftLeft") || hoverCapturePressedKeys.has("ShiftRight");
+    if (name === "alt") return event.altKey || hoverCapturePressedKeys.has("AltLeft") || hoverCapturePressedKeys.has("AltRight");
+    if (name === "meta") return event.metaKey || hoverCapturePressedKeys.has("MetaLeft") || hoverCapturePressedKeys.has("MetaRight");
+    return false;
+  }
+
+  function isHoverCaptureHotkeyPressed(event) {
     const hotkey = activeSettings.hoverCaptureHotkey || DEFAULTS.hoverCaptureHotkey;
     if (!hotkey || !hotkey.code) return false;
 
-    return event.code === hotkey.code &&
-      event.ctrlKey === Boolean(hotkey.ctrl) &&
-      event.shiftKey === Boolean(hotkey.shift) &&
-      event.altKey === Boolean(hotkey.alt) &&
-      event.metaKey === Boolean(hotkey.meta);
+    return hoverCapturePressedKeys.has(hotkey.code) &&
+      isModifierPressed("ctrl", event) === Boolean(hotkey.ctrl) &&
+      isModifierPressed("shift", event) === Boolean(hotkey.shift) &&
+      isModifierPressed("alt", event) === Boolean(hotkey.alt) &&
+      isModifierPressed("meta", event) === Boolean(hotkey.meta);
+  }
+
+  function shouldStopHoverCaptureForKeyup(event) {
+    const hotkey = activeSettings.hoverCaptureHotkey || DEFAULTS.hoverCaptureHotkey;
+    if (!hotkey || !hotkey.code) return true;
+
+    return event.code === hotkey.code ||
+      (hotkey.ctrl && (event.code === "ControlLeft" || event.code === "ControlRight")) ||
+      (hotkey.shift && (event.code === "ShiftLeft" || event.code === "ShiftRight")) ||
+      (hotkey.alt && (event.code === "AltLeft" || event.code === "AltRight")) ||
+      (hotkey.meta && (event.code === "MetaLeft" || event.code === "MetaRight"));
   }
 
   function onGlobalHoverCaptureKeydown(event) {
+    hoverCapturePressedKeys.add(event.code);
+
     if (event.repeat || hoverCaptureHotkeyHeld) return;
     if (isEditableTarget(event.target)) return;
-    if (!matchesHoverCaptureHotkey(event)) return;
+    if (!isHoverCaptureHotkeyPressed(event)) return;
     if (hoverCaptureActive || hoverCapturePanel) return;
 
+    event.preventDefault();
+    event.stopPropagation();
+    event.stopImmediatePropagation();
     hoverCaptureHotkeyHeld = true;
     startHoverCapture();
   }
 
   function onGlobalHoverCaptureKeyup(event) {
-    if (!hoverCaptureHotkeyHeld) return;
+    const shouldStop = hoverCaptureHotkeyHeld && shouldStopHoverCaptureForKeyup(event);
+    hoverCapturePressedKeys.delete(event.code);
 
-    const hotkey = activeSettings.hoverCaptureHotkey || DEFAULTS.hoverCaptureHotkey;
-    const releasedMainKey = event.code === hotkey.code;
-    const releasedRequiredModifier =
-      (hotkey.ctrl && !event.ctrlKey) ||
-      (hotkey.shift && !event.shiftKey) ||
-      (hotkey.alt && !event.altKey) ||
-      (hotkey.meta && !event.metaKey);
+    if (!shouldStop) return;
 
-    if (!releasedMainKey && !releasedRequiredModifier) return;
-
+    hoverCapturePressedKeys.clear();
     hoverCaptureHotkeyHeld = false;
     if (hoverCaptureActive) {
       stopHoverCapture();
@@ -652,6 +671,7 @@
   function onWindowBlurCancelHoverCaptureHold() {
     if (!hoverCaptureHotkeyHeld) return;
 
+    hoverCapturePressedKeys.clear();
     hoverCaptureHotkeyHeld = false;
     if (hoverCaptureActive) {
       stopHoverCapture();
@@ -832,10 +852,24 @@
     return null;
   }
 
-  function getSentenceAtPoint(x, y) {
-    if (!document.caretRangeFromPoint) return null;
+  function getCaretRangeFromPoint(x, y) {
+    if (document.caretRangeFromPoint) return document.caretRangeFromPoint(x, y);
 
-    const caretRange = document.caretRangeFromPoint(x, y);
+    if (document.caretPositionFromPoint) {
+      const position = document.caretPositionFromPoint(x, y);
+      if (!position) return null;
+
+      const range = document.createRange();
+      range.setStart(position.offsetNode, position.offset);
+      range.collapse(true);
+      return range;
+    }
+
+    return null;
+  }
+
+  function getSentenceAtPoint(x, y) {
+    const caretRange = getCaretRangeFromPoint(x, y);
     if (!caretRange) return null;
 
     const node = caretRange.startContainer;
