@@ -83,6 +83,18 @@
         </select>
       </label>
 
+      <div class="lookupSitesHeader">
+        <div>
+          <h3>Search websites</h3>
+          <p class="hint">Add, edit, delete, enable, and reorder search links. Use <code>{term}</code> where the selected term belongs. Optional placeholders: <code>{sourceLang}</code>, <code>{targetLang}</code>, <code>{wordReferencePair}</code>, <code>{lingueePair}</code>.</p>
+        </div>
+        <div class="lookupSitesActions">
+          <button id="addLookupSite" type="button">Add site</button>
+          <button id="resetLookupSites" type="button">Reset defaults</button>
+        </div>
+      </div>
+      <ul id="lookupSites" class="lookupSites"></ul>
+
       <p class="hint">Hotkeys can be changed at <code>chrome://extensions/shortcuts</code>. Defaults: lookup selected term = Ctrl/Command+Shift+L; save selected sentence = Ctrl/Command+Shift+S.</p>
     </section>
 

@@ -8,7 +8,11 @@ const DEFAULTS = {
   audioMode: "sentence",
   accentMode: "flexible",
   foreignLanguageDetection: true,
-  userLevel: "B1"
+  userLevel: "B1",
+  lookupSites: [
+    { id: "wordReference", name: "WordReference", enabled: true, urlTemplate: "https://www.wordreference.com/{wordReferencePair}/{term}" },
+    { id: "linguee", name: "Linguee", enabled: true, urlTemplate: "https://www.linguee.com/{lingueePair}/search?source=auto&query={term}" }
+  ]
 };
 
 importScripts("data/fr-lexicon-index.js");
@@ -109,10 +113,56 @@ async function openLookupTabs(term) {
 function buildLookupUrls(term, settings) {
   const encoded = encodeURIComponent(term);
   const pair = getLanguagePair(settings.lookupSourceLang, settings.lookupTargetLang);
-  return [
-    pair.wordReference ? `https://www.wordreference.com/${pair.wordReference}/${encoded}` : `https://www.wordreference.com/definition/${encoded}`,
-    pair.linguee ? `https://www.linguee.com/${pair.linguee}/search?source=auto&query=${encoded}` : `https://www.linguee.com/search?source=auto&query=${encoded}`
-  ];
+  return normalizeLookupSites(settings.lookupSites)
+    .filter(site => site.enabled && site.urlTemplate)
+    .map(site => buildLookupUrlFromTemplate(site.urlTemplate, { encoded, pair, settings }))
+    .filter(Boolean);
+}
+
+function buildLookupUrlFromTemplate(template, { encoded, pair, settings }) {
+  const wordReferencePair = pair.wordReference || "definition";
+  const lingueePair = pair.linguee || "";
+  const replacements = {
+    term: encoded,
+    sourceLang: encodeURIComponent(settings.lookupSourceLang || ""),
+    targetLang: encodeURIComponent(settings.lookupTargetLang || ""),
+    wordReferencePair: encodeURIComponent(wordReferencePair),
+    lingueePair: encodeURIComponent(lingueePair)
+  };
+  let url = String(template).trim().replace(/\{(term|sourceLang|targetLang|wordReferencePair|lingueePair)\}/g, (_, key) => replacements[key]);
+  if (!url) return "";
+  if (!/^[a-z][a-z0-9+.-]*:/i.test(url)) url = `https://${url}`;
+  if (!template.includes("{term}")) url += `${url.includes("?") ? "&" : "?"}q=${encoded}`;
+  return url;
+}
+
+function normalizeLookupSites(sites) {
+  const incoming = Array.isArray(sites) ? sites : [];
+  const normalized = [];
+  const seenIds = new Set();
+
+  for (const site of incoming) {
+    const normalizedSite = normalizeLookupSite(site);
+    if (!normalizedSite || seenIds.has(normalizedSite.id)) continue;
+    normalized.push(normalizedSite);
+    seenIds.add(normalizedSite.id);
+  }
+
+  for (const defaultSite of DEFAULTS.lookupSites) {
+    if (!seenIds.has(defaultSite.id)) normalized.push({ ...defaultSite });
+  }
+
+  return normalized.length ? normalized : DEFAULTS.lookupSites.map(site => ({ ...site }));
+}
+
+function normalizeLookupSite(site) {
+  if (!site || typeof site !== "object") return null;
+  const matchingDefault = DEFAULTS.lookupSites.find(defaultSite => defaultSite.id === site.id);
+  const id = String(site.id || crypto.randomUUID()).trim();
+  const name = String(site.name || matchingDefault?.name || site.id || "Lookup site").trim();
+  const urlTemplate = String(site.urlTemplate || matchingDefault?.urlTemplate || "").trim();
+  if (!id || !name || !urlTemplate) return null;
+  return { id, name, urlTemplate, enabled: site.enabled !== false };
 }
 
 function getLanguagePair(source, target) {
