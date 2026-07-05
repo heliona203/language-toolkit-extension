@@ -150,7 +150,7 @@ function renderTable() {
   }
 }
 
-function startNext() {
+async function startNext() {
   currentTermKey = termSelect.value;
   currentTerm = vocabTerms[currentTermKey];
 
@@ -168,7 +168,12 @@ function startNext() {
   copyBox.value = "";
   copyBox.classList.add("hidden");
 
-  sentenceDisplay.innerHTML = clozeSentence(currentSentence.text, currentTerm.term, currentTerm.forms);
+  sentenceDisplay.textContent = "Loading vocabulary match…";
+  const sentenceForCloze = currentSentence;
+  const cloze = await clozeSentence(sentenceForCloze.text, currentTerm, sentenceForCloze.id);
+  if (termSelect.value !== currentTermKey || currentSentence !== sentenceForCloze) return;
+  currentClozeAnswers = cloze.answers;
+  sentenceDisplay.innerHTML = cloze.html;
   statusLine.textContent = `${currentTerm.term} · ${currentTerm.status || "new"} · confidence ${Math.round(currentTerm.stats?.confidence || 0)}`;
   answer.focus();
 }
@@ -178,82 +183,35 @@ function chooseSentence(term) {
   return sentences[Math.floor(Math.random() * sentences.length)];
 }
 
-function clozeSentence(sentence, term, forms) {
+async function clozeSentence(sentence, term, sentenceId) {
   const safeSentence = escapeHtml(sentence);
   const blank = `<span class="cloze-blank">&nbsp;</span>`;
-  currentClozeAnswers = [term, ...(forms || [])].filter(Boolean);
-  // Longest first so a more specific override (e.g. "aboutissant") wins over
-  // a shorter one that might also happen to appear inside it.
-  const candidates = [term, ...(forms || [])]
-    .filter(Boolean)
-    .sort((a, b) => b.length - a.length);
-  const exactCandidates = candidates.map(candidate => escapeRegex(escapeHtml(candidate)));
-  const re = new RegExp(exactCandidates.join("|"), "iu");
-  if (re.test(safeSentence)) {
-    const exactMatch = String(sentence || "").match(new RegExp(candidates.map(escapeRegex).join("|"), "iu"));
-    if (exactMatch) currentClozeAnswers = [...new Set([exactMatch[0], ...currentClozeAnswers])];
-    return safeSentence.replace(re, blank);
-  }
+  const answers = [term.term, ...(term.forms || [])].filter(Boolean);
 
-  const fuzzyMatch = findFuzzyTermMatch(sentence, candidates);
-  if (fuzzyMatch) {
-    const matchedText = sentence.slice(fuzzyMatch.start, fuzzyMatch.end);
-    currentClozeAnswers = [...new Set([matchedText, ...currentClozeAnswers])];
-    const before = escapeHtml(sentence.slice(0, fuzzyMatch.start));
-    const after = escapeHtml(sentence.slice(fuzzyMatch.end));
-    return `${before}${blank}${after}`;
-  }
-
-  return `${blank} — ${safeSentence}`;
-}
-
-function findFuzzyTermMatch(sentence, candidates) {
-  const sentenceWords = [...String(sentence || "").matchAll(/\p{L}+(?:[’']\p{L}+)*/gu)];
-  if (!sentenceWords.length) return null;
-
-  for (const candidate of candidates) {
-    const candidateWords = extractFuzzyCandidateWords(candidate);
-    for (const candidateWord of candidateWords) {
-      for (const wordMatch of sentenceWords) {
-        if (fuzzyWordsMatch(candidateWord, wordMatch[0])) {
-          return { start: wordMatch.index, end: wordMatch.index + wordMatch[0].length };
-        }
-      }
+  const response = await chrome.runtime.sendMessage({
+    type: "MATCH_VOCAB_TERM",
+    payload: {
+      term: term.term,
+      sentence,
+      forms: term.forms || [],
+      lexicalEntry: term.lexicalEntry || null,
+      lang: settings.lang
     }
+  });
+
+  if (response?.lexicalEntry && !term.lexicalEntry) term.lexicalEntry = response.lexicalEntry;
+
+  if (response?.match) {
+    const matchedText = sentence.slice(response.match.start, response.match.end);
+    const matchedAnswers = [...new Set([matchedText, ...answers])];
+    const before = escapeHtml(sentence.slice(0, response.match.start));
+    const after = escapeHtml(sentence.slice(response.match.end));
+    return { html: `${before}${blank}${after}`, answers: matchedAnswers, sentenceId };
   }
 
-  return null;
+  return { html: `${blank} — ${safeSentence}`, answers, sentenceId };
 }
 
-function extractFuzzyCandidateWords(value) {
-  return [...String(value || "").matchAll(/\p{L}+(?:[’']\p{L}+)*/gu)]
-    .map(match => match[0])
-    .filter(word => normalizeFuzzyWord(word).length >= 4);
-}
-
-function fuzzyWordsMatch(a, b) {
-  const left = normalizeFuzzyWord(a);
-  const right = normalizeFuzzyWord(b);
-  if (left.length < 4 || right.length < 4) return false;
-
-  const prefixLength = commonPrefixLength(left, right);
-  const shorterLength = Math.min(left.length, right.length);
-  return prefixLength >= 4 && prefixLength / shorterLength >= 0.7;
-}
-
-function normalizeFuzzyWord(value) {
-  return String(value || "")
-    .toLowerCase()
-    .normalize("NFD")
-    .replace(/\p{Diacritic}/gu, "")
-    .replace(/[’‘]/g, "'");
-}
-
-function commonPrefixLength(a, b) {
-  let length = 0;
-  while (length < a.length && length < b.length && a[length] === b[length]) length += 1;
-  return length;
-}
 
 async function checkClozeAnswer() {
   const user = answer.value.trim();
@@ -390,7 +348,7 @@ function normalizeSentence(value) {
 
 /* ---------------- Manage Vocab tab ---------------- */
 
-function commitAddTerm() {
+async function commitAddTerm() {
   const term = cleanTerm(newTermInput.value);
   if (!term) return;
 
@@ -403,22 +361,21 @@ function commitAddTerm() {
     return;
   }
 
-  const now = new Date().toISOString();
-  vocabTerms[key] = {
-    term,
-    normalized: key,
-    createdAt: now,
-    updatedAt: now,
-    status: "new",
-    selectedByUser: true,
-    forms: [],
-    stats: createStats(),
-    sentences: []
-  };
+  const createResult = await chrome.runtime.sendMessage({ type: "CREATE_VOCAB_TERM", payload: { term } });
+  if (!createResult?.ok) {
+    alert(createResult?.error || "Could not add term.");
+    return;
+  }
+
+  const data = await chrome.storage.local.get({ vocabTerms: {} });
+  vocabTerms = data.vocabTerms || {};
+  currentTermKey = createResult.key;
+  termSelect.value = currentTermKey;
 
   viewState[key] = { open: true };
   addTermForm.classList.add("hidden");
   saveAndRefreshAll();
+
 }
 
 function renameTerm(oldKey, rawNewTerm) {
