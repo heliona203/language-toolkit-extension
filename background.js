@@ -110,6 +110,19 @@ async function openLookupTabs(term) {
   for (const url of urls) await chrome.tabs.create({ url, active: false });
 }
 
+const LOOKUP_SITE_BUILDERS = {
+  wordReference(encoded, pair) {
+    return pair.wordReference
+      ? `https://www.wordreference.com/${pair.wordReference}/${encoded}`
+      : `https://www.wordreference.com/definition/${encoded}`;
+  },
+  linguee(encoded, pair) {
+    return pair.linguee
+      ? `https://www.linguee.com/${pair.linguee}/search?source=auto&query=${encoded}`
+      : `https://www.linguee.com/search?source=auto&query=${encoded}`;
+  }
+};
+
 function buildLookupUrls(term, settings) {
   const encoded = encodeURIComponent(term);
   const pair = getLanguagePair(settings.lookupSourceLang, settings.lookupTargetLang);
