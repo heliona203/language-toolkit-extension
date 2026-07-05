@@ -109,9 +109,21 @@
   opacity: 0.78;
 }
 
-::highlight(lt-hover-capture) {
-  background-color: rgba(255, 214, 0, 0.55);
-  color: inherit;
+#lt-hover-capture-outline {
+  position: fixed;
+  top: 0;
+  left: 0;
+  pointer-events: none;
+  z-index: 2147483646;
+}
+
+.lt-hover-capture-outline-box {
+  position: fixed;
+  box-sizing: border-box;
+  border: 2px solid rgba(255, 153, 0, 0.95);
+  border-radius: 3px;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.35);
+  pointer-events: none;
 }
 
 #lt-hover-capture-panel {

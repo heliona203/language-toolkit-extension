@@ -232,43 +232,61 @@ async function recordReview(correct, type) {
   const term = vocabTerms[currentTermKey];
   const now = new Date().toISOString();
 
-  term.stats ||= {
-    timesReviewed: 0, clozeCorrect: 0, clozeWrong: 0, copyCorrect: 0, copyWrong: 0,
-    consecutiveCorrect: 0, lastReviewedAt: null, nextEncounterGap: 1, confidence: 0
-  };
+  term.stats ||= createStats();
+  currentSentence.stats ||= createStats();
 
-  term.stats.timesReviewed += 1;
-  term.stats.lastReviewedAt = now;
-
-  if (type === "copy") correct ? term.stats.copyCorrect += 1 : term.stats.copyWrong += 1;
-  else correct ? term.stats.clozeCorrect += 1 : term.stats.clozeWrong += 1;
-
-  if (correct) {
-    term.stats.consecutiveCorrect += 1;
-    term.stats.nextEncounterGap = Math.min(25, Math.max(1, term.stats.nextEncounterGap * 2));
-  } else {
-    term.stats.consecutiveCorrect = 0;
-    term.stats.nextEncounterGap = 1;
-  }
+  applyReviewToStats(term.stats, correct, type, now);
+  applyReviewToStats(currentSentence.stats, correct, type, now);
 
   updateGraduation(term);
+  currentSentence.stats.confidence = computeConfidence(currentSentence.stats);
   term.updatedAt = now;
   await persist();
   renderTable();
+  renderVocabList();
+}
+
+function createStats() {
+  return {
+    timesReviewed: 0, clozeCorrect: 0, clozeWrong: 0, copyCorrect: 0, copyWrong: 0,
+    consecutiveCorrect: 0, lastReviewedAt: null, nextEncounterGap: 1, confidence: 0
+  };
+}
+
+function applyReviewToStats(stats, correct, type, now) {
+  stats.timesReviewed += 1;
+  stats.lastReviewedAt = now;
+
+  if (type === "copy") correct ? stats.copyCorrect += 1 : stats.copyWrong += 1;
+  else correct ? stats.clozeCorrect += 1 : stats.clozeWrong += 1;
+
+  if (correct) {
+    stats.consecutiveCorrect += 1;
+    stats.nextEncounterGap = Math.min(25, Math.max(1, stats.nextEncounterGap * 2));
+  } else {
+    stats.consecutiveCorrect = 0;
+    stats.nextEncounterGap = 1;
+  }
+}
+
+function computeConfidence(stats) {
+  const correct = stats.clozeCorrect + stats.copyCorrect;
+  const wrong = stats.clozeWrong + stats.copyWrong;
+  const total = Math.max(1, correct + wrong);
+  const accuracy = correct / total;
+  const streak = stats.consecutiveCorrect || 0;
+  return accuracy * 70 + Math.min(30, streak * 4);
 }
 
 function updateGraduation(term) {
   const stats = term.stats;
   const correct = stats.clozeCorrect + stats.copyCorrect;
   const wrong = stats.clozeWrong + stats.copyWrong;
-  const total = Math.max(1, correct + wrong);
-  const accuracy = correct / total;
   const streak = stats.consecutiveCorrect || 0;
-  const confidence = accuracy * 70 + Math.min(30, streak * 4);
-  stats.confidence = confidence;
+  stats.confidence = computeConfidence(stats);
 
-  if (confidence >= 92 && correct >= 15 && streak >= 8) term.status = "graduated";
-  else if (confidence >= 75 && correct >= 8) term.status = "familiar";
+  if (stats.confidence >= 92 && correct >= 15 && streak >= 8) term.status = "graduated";
+  else if (stats.confidence >= 75 && correct >= 8) term.status = "familiar";
   else if (correct >= 2 || wrong >= 1) term.status = "learning";
   else term.status = "new";
 }
@@ -322,10 +340,7 @@ function commitAddTerm() {
     updatedAt: now,
     status: "new",
     selectedByUser: true,
-    stats: {
-      timesReviewed: 0, clozeCorrect: 0, clozeWrong: 0, copyCorrect: 0, copyWrong: 0,
-      consecutiveCorrect: 0, lastReviewedAt: null, nextEncounterGap: 1, confidence: 0
-    },
+    stats: createStats(),
     sentences: []
   };
 
@@ -375,6 +390,37 @@ function renameTerm(oldKey, rawNewTerm) {
   saveAndRefreshAll();
 }
 
+function resetTermProgress(key) {
+  const term = vocabTerms[key];
+  if (!term) return;
+  const count = term.sentences?.length || 0;
+  const confirmed = confirm(`Reset all practice progress for "${term.term}"?${count ? ` This also resets progress for its ${count} sentence${count === 1 ? "" : "s"}.` : ""}`);
+  if (!confirmed) return;
+
+  term.stats = createStats();
+  term.status = "new";
+  for (const sentence of term.sentences || []) {
+    sentence.stats = createStats();
+  }
+  term.updatedAt = new Date().toISOString();
+  saveAndRefreshAll();
+}
+
+function resetSentenceProgress(key, id) {
+  const term = vocabTerms[key];
+  if (!term) return;
+  const sentence = term.sentences?.find(s => s.id === id);
+  if (!sentence) return;
+
+  const confirmed = confirm("Reset practice progress for this sentence?");
+  if (!confirmed) return;
+
+  sentence.stats = createStats();
+  term.updatedAt = new Date().toISOString();
+  viewState[key] = { open: true };
+  saveAndRefreshAll();
+}
+
 function deleteTerm(key) {
   const term = vocabTerms[key];
   if (!term) return;
@@ -403,7 +449,8 @@ function addSentenceToTerm(key, rawText) {
     sourceUrl: "",
     sourceTitle: "",
     sourceSite: "",
-    createdAt: new Date().toISOString()
+    createdAt: new Date().toISOString(),
+    stats: createStats()
   });
   term.updatedAt = new Date().toISOString();
   viewState[key] = { open: true };
@@ -486,6 +533,7 @@ function buildVocabCard(key) {
       <span class="badge badge-${escapeHtml(status)}">${escapeHtml(status)}</span>
       <span class="vocabTermMeta">${sentenceCount} sentence${sentenceCount === 1 ? "" : "s"} · ${confidence}% confidence</span>
       <div class="vocabCardActions">
+        <button class="small ghost" data-action="reset-term" type="button">Reset progress</button>
         <button class="small ghost" data-action="rename" type="button">Rename</button>
         <button class="small danger" data-action="delete-term" type="button">Delete</button>
       </div>
@@ -523,6 +571,9 @@ function buildSentenceRow(sentence) {
   row.dataset.id = sentence.id;
 
   const metaParts = [sentence.sourceSite, sentence.createdAt ? new Date(sentence.createdAt).toLocaleDateString() : ""].filter(Boolean);
+  if (sentence.stats?.timesReviewed) {
+    metaParts.push(`${sentence.stats.timesReviewed} reviewed · ${Math.round(sentence.stats.confidence || 0)}% confidence`);
+  }
   const meta = metaParts.join(" · ");
 
   row.innerHTML = `
@@ -532,6 +583,7 @@ function buildSentenceRow(sentence) {
     </div>
     <div class="sentenceRowActions">
       <button class="small" data-action="save-sentence" type="button">Save</button>
+      <button class="small ghost" data-action="reset-sentence" type="button">Reset progress</button>
       <button class="small danger" data-action="delete-sentence" type="button">Delete</button>
     </div>
   `;
@@ -579,6 +631,17 @@ function handleVocabListClick(event) {
 
   if (action === "delete-term") {
     deleteTerm(key);
+    return;
+  }
+
+  if (action === "reset-term") {
+    resetTermProgress(key);
+    return;
+  }
+
+  if (action === "reset-sentence") {
+    const sentenceRow = actionEl.closest(".sentenceRow");
+    resetSentenceProgress(key, sentenceRow.dataset.id);
     return;
   }
 

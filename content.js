@@ -713,7 +713,7 @@
 
   function updateHoverCaptureHighlightAt(x, y, target) {
     const el = target || document.elementFromPoint(x, y);
-    if (el && el.closest("#lt-hover-capture-panel, #inline-cloze-toast, #inline-cloze-floating-button")) {
+    if (el && el.closest("#lt-hover-capture-panel, #lt-hover-capture-outline, #inline-cloze-toast, #inline-cloze-floating-button")) {
       clearHoverCaptureHighlight();
       return;
     }
@@ -795,7 +795,7 @@
           ]);
 
           if (blockedTags.has(parent.tagName)) return NodeFilter.FILTER_REJECT;
-          if (parent.closest("#lt-hover-capture-panel, #inline-cloze-toast, #inline-cloze-floating-button")) {
+          if (parent.closest("#lt-hover-capture-panel, #lt-hover-capture-outline, #inline-cloze-toast, #inline-cloze-floating-button")) {
             return NodeFilter.FILTER_REJECT;
           }
           if (!node.nodeValue) return NodeFilter.FILTER_REJECT;
@@ -877,7 +877,7 @@
 
     const parent = node.parentElement;
     if (!parent || !isVisible(parent)) return null;
-    if (parent.closest("#lt-hover-capture-panel, #inline-cloze-toast, #inline-cloze-floating-button")) return null;
+    if (parent.closest("#lt-hover-capture-panel, #lt-hover-capture-outline, #inline-cloze-toast, #inline-cloze-floating-button")) return null;
 
     const block = getHoverCaptureBlock(node);
     const { nodes, text } = getHoverCaptureBlockInfo(block);
@@ -916,14 +916,41 @@
     return null;
   }
 
+  let hoverCaptureOutlineContainer = null;
+  let hoverCaptureOutlineBoxes = [];
+
+  function getHoverCaptureOutlineContainer() {
+    if (!hoverCaptureOutlineContainer) {
+      hoverCaptureOutlineContainer = document.createElement("div");
+      hoverCaptureOutlineContainer.id = "lt-hover-capture-outline";
+      document.body.appendChild(hoverCaptureOutlineContainer);
+    }
+    return hoverCaptureOutlineContainer;
+  }
+
   function highlightRange(range) {
-    if (!window.Highlight || !CSS.highlights) return;
-    CSS.highlights.set("lt-hover-capture", new Highlight(range));
+    clearHoverCaptureHighlight();
+
+    const rects = range.getClientRects();
+    if (!rects.length) return;
+
+    const container = getHoverCaptureOutlineContainer();
+    for (const rect of rects) {
+      if (rect.width <= 0 || rect.height <= 0) continue;
+      const box = document.createElement("div");
+      box.className = "lt-hover-capture-outline-box";
+      box.style.left = `${rect.left}px`;
+      box.style.top = `${rect.top}px`;
+      box.style.width = `${rect.width}px`;
+      box.style.height = `${rect.height}px`;
+      container.appendChild(box);
+      hoverCaptureOutlineBoxes.push(box);
+    }
   }
 
   function clearHoverCaptureHighlight() {
-    if (!window.CSS || !CSS.highlights) return;
-    CSS.highlights.delete("lt-hover-capture");
+    for (const box of hoverCaptureOutlineBoxes) box.remove();
+    hoverCaptureOutlineBoxes = [];
   }
 
   async function openHoverCapturePanel(sentenceText, x, y) {
