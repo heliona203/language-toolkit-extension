@@ -58,6 +58,21 @@
       </div>
 
       <div class="dataSection">
+        <h3>Sync</h3>
+        <p class="hint">Sign in with the account you created in the Firebase console to keep vocab in sync with the desktop extension.</p>
+        <div id="syncSignedOut" class="dataActions">
+          <input id="syncEmail" type="email" autocomplete="username" placeholder="Email">
+          <input id="syncPassword" type="password" autocomplete="current-password" placeholder="Password">
+          <button id="syncSignIn" type="button" class="ghost">Sign in</button>
+        </div>
+        <div id="syncSignedIn" class="dataActions hidden">
+          <button id="syncNowBtn" type="button" class="ghost">Sync now</button>
+          <button id="syncSignOut" type="button" class="ghost">Sign out</button>
+        </div>
+        <p id="syncStatus" class="hint"></p>
+      </div>
+
+      <div class="dataSection">
         <h3>Data</h3>
         <p class="hint">Saved vocab lives only in this browser's local storage. Export a backup, or import a JSON file exported from the Language Toolkit extension's Options page for a one-time migration.</p>
         <div class="dataActions">
@@ -141,6 +156,8 @@
   <script src="storage.js"></script>
   <script src="fr-lexicon-index.js"></script>
   <script src="lexicon.js"></script>
+  <script src="firebase-config.js"></script>
+  <script src="sync.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

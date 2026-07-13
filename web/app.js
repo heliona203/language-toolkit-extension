@@ -38,6 +38,12 @@ const exportDataBtn = document.getElementById("exportData");
 const importDataInput = document.getElementById("importData");
 const dataStatus = document.getElementById("dataStatus");
 
+const syncSignedOut = document.getElementById("syncSignedOut");
+const syncSignedIn = document.getElementById("syncSignedIn");
+const syncEmail = document.getElementById("syncEmail");
+const syncPassword = document.getElementById("syncPassword");
+const syncStatus = document.getElementById("syncStatus");
+
 document.getElementById("options").addEventListener("click", () => {
   settingsPanel.classList.toggle("hidden");
 });
@@ -102,7 +108,56 @@ importDataInput.addEventListener("change", async (event) => {
   importDataInput.value = "";
 });
 
+document.getElementById("syncSignIn").addEventListener("click", async () => {
+  syncStatus.textContent = "Signing in…";
+  const result = await window.sync.signIn(syncEmail.value.trim(), syncPassword.value);
+  if (!result.ok) {
+    syncStatus.textContent = result.error;
+    return;
+  }
+  syncPassword.value = "";
+  renderSyncUi();
+  await runSync();
+});
+
+document.getElementById("syncSignOut").addEventListener("click", () => {
+  window.sync.signOut();
+  renderSyncUi();
+});
+
+document.getElementById("syncNowBtn").addEventListener("click", runSync);
+
 init();
+
+function renderSyncUi() {
+  const session = window.sync.getSession();
+  syncSignedOut.classList.toggle("hidden", Boolean(session));
+  syncSignedIn.classList.toggle("hidden", !session);
+  if (session) {
+    const lastSyncedAt = window.sync.getLastSyncedAt();
+    const lastSynced = lastSyncedAt ? new Date(lastSyncedAt).toLocaleString() : "never";
+    syncStatus.textContent = `Signed in as ${session.email} · last synced ${lastSynced}`;
+  }
+}
+
+async function runSync() {
+  syncStatus.textContent = "Syncing…";
+  const result = await window.sync.syncNow();
+  if (!result.ok) {
+    syncStatus.textContent = `Sync failed: ${result.error}`;
+    return;
+  }
+  vocabTerms = window.storage.getVocabTerms();
+  settings = window.storage.getSettings();
+  settingsLang.value = settings.lang;
+  settingsAudioMode.value = settings.audioMode;
+  settingsAccentMode.value = settings.accentMode;
+  renderTermSelect();
+  renderTable();
+  renderVocabList();
+  renderSyncUi();
+  if (result.pushError) syncStatus.textContent = `Synced locally, but couldn't push: ${result.pushError}`;
+}
 
 function activateTab(name) {
   document.querySelectorAll(".tab").forEach(tab => {
@@ -136,6 +191,9 @@ async function init() {
   }
 
   if (location.hash === "#manage") activateTab("manage");
+
+  renderSyncUi();
+  if (window.sync.getSession()) await runSync();
 }
 
 function saveSettingsPanel() {
@@ -149,6 +207,7 @@ function saveSettingsPanel() {
 
 async function persist() {
   window.storage.setVocabTerms(vocabTerms);
+  if (window.sync.getSession()) window.sync.schedulePush();
 }
 
 function exportVocabJson() {
@@ -593,6 +652,7 @@ function deleteTerm(key) {
   const confirmed = confirm(`Delete "${term.term}"${count ? ` and its ${count} sentence${count === 1 ? "" : "s"}` : ""}? This cannot be undone.`);
   if (!confirmed) return;
 
+  window.sync.recordTermTombstone(key);
   delete vocabTerms[key];
   delete viewState[key];
   saveAndRefreshAll();
@@ -645,6 +705,7 @@ function deleteSentence(key, id) {
   const confirmed = confirm("Delete this sentence?");
   if (!confirmed) return;
 
+  window.sync.recordSentenceTombstone(key, id);
   term.sentences = term.sentences.filter(s => s.id !== id);
   term.updatedAt = new Date().toISOString();
   viewState[key] = { open: true };

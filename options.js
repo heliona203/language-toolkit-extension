@@ -260,7 +260,8 @@ async function save() {
     accentMode: document.getElementById("accentMode").value,
     foreignLanguageDetection: document.getElementById("foreignLanguageDetection").checked,
     userLevel: document.getElementById("userLevel").value,
-    lookupSites: lookupSitesState
+    lookupSites: lookupSitesState,
+    settingsUpdatedAt: new Date().toISOString()
   };
   await chrome.storage.sync.set(settings);
   document.getElementById("status").textContent = "Saved.";
@@ -307,4 +308,51 @@ document.getElementById("importData").addEventListener("change", async (event) =
   catch (err) { document.getElementById("status").textContent = `Import failed: ${err.message}`; }
 });
 
+document.getElementById("syncSignIn").addEventListener("click", async () => {
+  const status = document.getElementById("syncStatus");
+  status.textContent = "Signing in…";
+  const emailInput = document.getElementById("syncEmail");
+  const passwordInput = document.getElementById("syncPassword");
+  const result = await window.sync.signIn(emailInput.value.trim(), passwordInput.value);
+  if (!result.ok) {
+    status.textContent = result.error;
+    return;
+  }
+  passwordInput.value = "";
+  await renderSyncUi();
+  await runSync();
+});
+
+document.getElementById("syncSignOut").addEventListener("click", async () => {
+  await window.sync.signOut();
+  await renderSyncUi();
+});
+
+document.getElementById("syncNowBtn").addEventListener("click", runSync);
+
+async function renderSyncUi() {
+  const session = await window.sync.getSession();
+  document.getElementById("syncSignedOut").classList.toggle("hidden", Boolean(session));
+  document.getElementById("syncSignedIn").classList.toggle("hidden", !session);
+  const status = document.getElementById("syncStatus");
+  if (session) {
+    const lastSyncedAt = await window.sync.getLastSyncedAt();
+    const lastSynced = lastSyncedAt ? new Date(lastSyncedAt).toLocaleString() : "never";
+    status.textContent = `Signed in as ${session.email} · last synced ${lastSynced}`;
+  }
+}
+
+async function runSync() {
+  const status = document.getElementById("syncStatus");
+  status.textContent = "Syncing…";
+  const result = await window.sync.syncNow();
+  if (!result.ok) {
+    status.textContent = `Sync failed: ${result.error}`;
+    return;
+  }
+  await renderSyncUi();
+  if (result.pushError) status.textContent = `Synced locally, but couldn't push: ${result.pushError}`;
+}
+
 load();
+renderSyncUi();

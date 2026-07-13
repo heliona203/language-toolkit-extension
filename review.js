@@ -110,10 +110,22 @@ async function init() {
   }
 
   if (location.hash === "#manage") activateTab("manage");
+
+  if (await window.sync.getSession()) {
+    const result = await window.sync.syncNow();
+    if (result.ok) {
+      vocabTerms = result.vocabTerms;
+      settings = await chrome.storage.sync.get(DEFAULTS);
+      renderTermSelect();
+      renderTable();
+      renderVocabList();
+    }
+  }
 }
 
 async function persist() {
   await chrome.storage.local.set({ vocabTerms });
+  if (await window.sync.getSession()) window.sync.schedulePush();
 }
 
 /* ---------------- Practice tab ---------------- */
@@ -532,6 +544,7 @@ function deleteTerm(key) {
   const confirmed = confirm(`Delete "${term.term}"${count ? ` and its ${count} sentence${count === 1 ? "" : "s"}` : ""}? This cannot be undone.`);
   if (!confirmed) return;
 
+  window.sync.recordTermTombstone(key);
   delete vocabTerms[key];
   delete viewState[key];
   saveAndRefreshAll();
@@ -584,6 +597,7 @@ function deleteSentence(key, id) {
   const confirmed = confirm("Delete this sentence?");
   if (!confirmed) return;
 
+  window.sync.recordSentenceTombstone(key, id);
   term.sentences = term.sentences.filter(s => s.id !== id);
   term.updatedAt = new Date().toISOString();
   viewState[key] = { open: true };
