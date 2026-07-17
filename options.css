@@ -24,13 +24,16 @@ section {
 
 label { display: block; margin: 14px 0; }
 
-select, input[type="number"], input[type="text"], input[type="url"] {
+select, input[type="number"], input[type="text"], input[type="url"], input[type="email"], input[type="password"] {
   width: 100%;
   max-width: 360px;
   box-sizing: border-box;
   margin-top: 5px;
   padding: 7px;
 }
+
+.hidden { display: none; }
+#syncSignedIn button { margin-right: 8px; }
 
 .radio { display: flex; align-items: flex-start; gap: 10px; }
 .radio small { display: block; margin-top: 3px; color: #555; line-height: 1.35; }

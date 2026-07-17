@@ -163,10 +163,28 @@
       </label>
     </section>
 
+    <section>
+      <h2>Sync</h2>
+      <p class="hint">Sign in with the account you created in the Firebase console to keep vocab in sync with the phone web app. Signing in here also lets the Vocab Toolkit tab (Review page) sync automatically.</p>
+      <div id="syncSignedOut">
+        <label>Email <input id="syncEmail" type="email" autocomplete="username"></label>
+        <label>Password <input id="syncPassword" type="password" autocomplete="current-password"></label>
+        <button id="syncSignIn" type="button">Sign in</button>
+        <button id="syncSignInGoogle" type="button">Sign in with Google</button>
+      </div>
+      <div id="syncSignedIn" class="row hidden">
+        <button id="syncNowBtn" type="button">Sync now</button>
+        <button id="syncSignOut" type="button">Sign out</button>
+      </div>
+      <p id="syncStatus" class="hint"></p>
+    </section>
+
     <button id="save">Save options</button>
     <p id="status"></p>
   </main>
 
+  <script src="firebase-config.js"></script>
+  <script src="sync.js"></script>
   <script src="options.js"></script>
 </body>
 </html>

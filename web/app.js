@@ -1,5 +1,3 @@
-const DEFAULTS = { lang: "fr-FR", audioMode: "sentence", accentMode: "flexible" };
-
 let vocabTerms = {};
 let settings = {};
 let currentTermKey = "";
@@ -32,7 +30,25 @@ const addTermBtn = document.getElementById("addTermBtn");
 const addTermForm = document.getElementById("addTermForm");
 const newTermInput = document.getElementById("newTermInput");
 
-document.getElementById("options").addEventListener("click", () => chrome.runtime.openOptionsPage());
+const settingsPanel = document.getElementById("settingsPanel");
+const settingsLang = document.getElementById("settingsLang");
+const settingsAudioMode = document.getElementById("settingsAudioMode");
+const settingsAccentMode = document.getElementById("settingsAccentMode");
+const exportDataBtn = document.getElementById("exportData");
+const importDataInput = document.getElementById("importData");
+const dataStatus = document.getElementById("dataStatus");
+
+const syncSignedOut = document.getElementById("syncSignedOut");
+const syncSignedIn = document.getElementById("syncSignedIn");
+const syncEmail = document.getElementById("syncEmail");
+const syncPassword = document.getElementById("syncPassword");
+const syncStatus = document.getElementById("syncStatus");
+
+document.getElementById("options").addEventListener("click", () => {
+  settingsPanel.classList.toggle("hidden");
+});
+document.getElementById("closeSettings").addEventListener("click", () => settingsPanel.classList.add("hidden"));
+document.getElementById("saveSettings").addEventListener("click", saveSettingsPanel);
 document.getElementById("start").addEventListener("click", startNext);
 document.getElementById("speak").addEventListener("click", () => { if (currentSentence) speak(currentSentence.text, settings.lang); });
 termSelect.addEventListener("change", () => { currentTermKey = termSelect.value; startNext({ preferredKey: currentTermKey }); });
@@ -79,7 +95,80 @@ manageSearch.addEventListener("input", () => {
 
 vocabList.addEventListener("click", handleVocabListClick);
 
+exportDataBtn.addEventListener("click", exportVocabJson);
+importDataInput.addEventListener("change", async (event) => {
+  const file = event.target.files?.[0];
+  if (!file) return;
+  try {
+    await importVocabJson(file);
+    dataStatus.textContent = "Imported vocab JSON.";
+  } catch (error) {
+    dataStatus.textContent = `Import failed: ${error.message}`;
+  }
+  importDataInput.value = "";
+});
+
+document.getElementById("syncSignIn").addEventListener("click", async () => {
+  syncStatus.textContent = "Signing in…";
+  const result = await window.sync.signIn(syncEmail.value.trim(), syncPassword.value);
+  if (!result.ok) {
+    syncStatus.textContent = result.error;
+    return;
+  }
+  syncPassword.value = "";
+  renderSyncUi();
+  await runSync();
+});
+
+document.getElementById("syncSignInGoogle").addEventListener("click", async () => {
+  syncStatus.textContent = "Signing in with Google…";
+  const result = await window.sync.signInWithGoogle();
+  if (!result.ok) {
+    syncStatus.textContent = result.error;
+    return;
+  }
+  renderSyncUi();
+  await runSync();
+});
+
+document.getElementById("syncSignOut").addEventListener("click", () => {
+  window.sync.signOut();
+  renderSyncUi();
+});
+
+document.getElementById("syncNowBtn").addEventListener("click", runSync);
+
 init();
+
+function renderSyncUi() {
+  const session = window.sync.getSession();
+  syncSignedOut.classList.toggle("hidden", Boolean(session));
+  syncSignedIn.classList.toggle("hidden", !session);
+  if (session) {
+    const lastSyncedAt = window.sync.getLastSyncedAt();
+    const lastSynced = lastSyncedAt ? new Date(lastSyncedAt).toLocaleString() : "never";
+    syncStatus.textContent = `Signed in as ${session.email} · last synced ${lastSynced}`;
+  }
+}
+
+async function runSync() {
+  syncStatus.textContent = "Syncing…";
+  const result = await window.sync.syncNow();
+  if (!result.ok) {
+    syncStatus.textContent = `Sync failed: ${result.error}`;
+    return;
+  }
+  vocabTerms = window.storage.getVocabTerms();
+  settings = window.storage.getSettings();
+  settingsLang.value = settings.lang;
+  settingsAudioMode.value = settings.audioMode;
+  settingsAccentMode.value = settings.accentMode;
+  renderTermSelect();
+  renderTable();
+  renderVocabList();
+  renderSyncUi();
+  if (result.pushError) syncStatus.textContent = `Synced locally, but couldn't push: ${result.pushError}`;
+}
 
 function activateTab(name) {
   document.querySelectorAll(".tab").forEach(tab => {
@@ -92,9 +181,12 @@ function activateTab(name) {
 }
 
 async function init() {
-  settings = await chrome.storage.sync.get(DEFAULTS);
-  const data = await chrome.storage.local.get({ vocabTerms: {} });
-  vocabTerms = data.vocabTerms || {};
+  settings = window.storage.getSettings();
+  settingsLang.value = settings.lang;
+  settingsAudioMode.value = settings.audioMode;
+  settingsAccentMode.value = settings.accentMode;
+
+  vocabTerms = window.storage.getVocabTerms();
   renderTermSelect();
   renderTable();
   renderVocabList();
@@ -111,21 +203,52 @@ async function init() {
 
   if (location.hash === "#manage") activateTab("manage");
 
-  if (await window.sync.getSession()) {
-    const result = await window.sync.syncNow();
-    if (result.ok) {
-      vocabTerms = result.vocabTerms;
-      settings = await chrome.storage.sync.get(DEFAULTS);
-      renderTermSelect();
-      renderTable();
-      renderVocabList();
-    }
-  }
+  renderSyncUi();
+  if (window.sync.getSession()) await runSync();
+}
+
+function saveSettingsPanel() {
+  settings = window.storage.setSettings({
+    lang: settingsLang.value,
+    audioMode: settingsAudioMode.value,
+    accentMode: settingsAccentMode.value
+  });
+  settingsPanel.classList.add("hidden");
 }
 
 async function persist() {
-  await chrome.storage.local.set({ vocabTerms });
-  if (await window.sync.getSession()) window.sync.schedulePush();
+  window.storage.setVocabTerms(vocabTerms);
+  if (window.sync.getSession()) window.sync.schedulePush();
+}
+
+function exportVocabJson() {
+  const payload = {
+    app: "Inline Language Toolkit",
+    schemaVersion: 1,
+    exportedAt: new Date().toISOString(),
+    vocabTerms: window.storage.getVocabTerms()
+  };
+  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = `language-toolkit-vocab-${new Date().toISOString().slice(0, 10)}.json`;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+  dataStatus.textContent = "Exported vocab JSON.";
+}
+
+async function importVocabJson(file) {
+  const text = await file.text();
+  const payload = JSON.parse(text);
+  const incoming = payload.vocabTerms || payload;
+  if (!incoming || typeof incoming !== "object") throw new Error("No vocabTerms object found.");
+  const merged = { ...window.storage.getVocabTerms(), ...incoming };
+  window.storage.setVocabTerms(merged);
+  vocabTerms = merged;
+  saveAndRefreshAll();
 }
 
 /* ---------------- Practice tab ---------------- */
@@ -244,15 +367,12 @@ async function clozeSentence(sentence, term, sentenceId) {
   const blank = `<span class="cloze-blank">&nbsp;</span>`;
   const answers = [term.term, ...(term.forms || [])].filter(Boolean);
 
-  const response = await chrome.runtime.sendMessage({
-    type: "MATCH_VOCAB_TERM",
-    payload: {
-      term: term.term,
-      sentence,
-      forms: term.forms || [],
-      lexicalEntry: term.lexicalEntry || null,
-      lang: settings.lang
-    }
+  const response = await window.lexicon.matchVocabTermInSentence({
+    term: term.term,
+    sentence,
+    forms: term.forms || [],
+    lexicalEntry: term.lexicalEntry || null,
+    lang: settings.lang
   });
 
   if (response?.lexicalEntry && !term.lexicalEntry) term.lexicalEntry = response.lexicalEntry;
@@ -439,14 +559,13 @@ async function commitAddTerm() {
     return;
   }
 
-  const createResult = await chrome.runtime.sendMessage({ type: "CREATE_VOCAB_TERM", payload: { term } });
+  const createResult = await window.lexicon.createVocabTermRecord({ term });
   if (!createResult?.ok) {
     alert(createResult?.error || "Could not add term.");
     return;
   }
 
-  const data = await chrome.storage.local.get({ vocabTerms: {} });
-  vocabTerms = data.vocabTerms || {};
+  vocabTerms = window.storage.getVocabTerms();
   currentTermKey = createResult.key;
   termSelect.value = currentTermKey;
 

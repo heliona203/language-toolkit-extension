@@ -1,0 +1,165 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Vocab Review — Language Toolkit</title>
+  <meta name="description" content="Practice saved vocab as cloze sentences and manage your word bank.">
+  <link rel="manifest" href="manifest.webmanifest">
+  <meta name="theme-color" content="#4f5eff">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="Vocab Toolkit">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%234f5eff'/%3E%3Ctext x='32' y='43' font-size='30' font-family='sans-serif' font-weight='700' fill='white' text-anchor='middle'%3EL%3C/text%3E%3C/svg%3E">
+  <link rel="apple-touch-icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%234f5eff'/%3E%3Ctext x='32' y='43' font-size='30' font-family='sans-serif' font-weight='700' fill='white' text-anchor='middle'%3EL%3C/text%3E%3C/svg%3E">
+  <link rel="stylesheet" href="review.css">
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
+</head>
+<body>
+  <main>
+    <header>
+      <div class="titleBlock">
+        <h1>Vocab Toolkit</h1>
+        <p>Practice saved sentences as cloze, or manage your word bank.</p>
+      </div>
+      <button id="options" class="ghost">Settings</button>
+    </header>
+
+    <section id="settingsPanel" class="settingsPanel hidden">
+      <h2>Settings</h2>
+      <label>Target language
+        <select id="settingsLang">
+          <option value="fr-FR">French</option>
+          <option value="es-ES">Spanish</option>
+          <option value="ja-JP">Japanese</option>
+          <option value="ko-KR">Korean</option>
+          <option value="zh-CN">Chinese Mandarin</option>
+          <option value="de-DE">German</option>
+          <option value="it-IT">Italian</option>
+          <option value="en-US">English</option>
+        </select>
+      </label>
+      <label>Audio on Enter
+        <select id="settingsAudioMode">
+          <option value="answer">Speak answer only</option>
+          <option value="sentence">Speak full sentence</option>
+          <option value="both">Speak answer, then sentence</option>
+          <option value="off">Off</option>
+        </select>
+      </label>
+      <label>Accent checking
+        <select id="settingsAccentMode">
+          <option value="flexible">Flexible: accept missing/wrong accents, but highlight accent fixes in yellow</option>
+          <option value="strict">Strict: missing/wrong accents count as wrong and are highlighted in red</option>
+        </select>
+      </label>
+      <div class="settingsActions">
+        <button id="saveSettings" type="button">Save</button>
+        <button id="closeSettings" class="ghost" type="button">Close</button>
+      </div>
+
+      <div class="dataSection">
+        <h3>Sync</h3>
+        <p class="hint">Sign in with the account you created in the Firebase console to keep vocab in sync with the desktop extension.</p>
+        <div id="syncSignedOut" class="dataActions">
+          <input id="syncEmail" type="email" autocomplete="username" placeholder="Email">
+          <input id="syncPassword" type="password" autocomplete="current-password" placeholder="Password">
+          <button id="syncSignIn" type="button" class="ghost">Sign in</button>
+          <button id="syncSignInGoogle" type="button" class="ghost">Sign in with Google</button>
+        </div>
+        <div id="syncSignedIn" class="dataActions hidden">
+          <button id="syncNowBtn" type="button" class="ghost">Sync now</button>
+          <button id="syncSignOut" type="button" class="ghost">Sign out</button>
+        </div>
+        <p id="syncStatus" class="hint"></p>
+      </div>
+
+      <div class="dataSection">
+        <h3>Data</h3>
+        <p class="hint">Saved vocab lives only in this browser's local storage. Export a backup, or import a JSON file exported from the Language Toolkit extension's Options page for a one-time migration.</p>
+        <div class="dataActions">
+          <button id="exportData" type="button" class="ghost">Export vocab JSON</button>
+          <label class="fileLabel ghost">
+            Import vocab JSON
+            <input id="importData" type="file" accept="application/json,.json">
+          </label>
+        </div>
+        <p id="dataStatus" class="hint"></p>
+      </div>
+    </section>
+
+    <nav class="tabs" role="tablist">
+      <button class="tab active" data-tab="practice" role="tab" aria-selected="true">Practice</button>
+      <button class="tab" data-tab="manage" role="tab" aria-selected="false">Manage Vocab</button>
+    </nav>
+
+    <section id="practiceTab" class="tabPanel">
+      <section class="toolbar">
+        <label>Term <select id="termSelect"></select></label>
+        <label>Practice mode
+          <select id="practiceMode">
+            <option value="cloze">Cloze only</option>
+            <option value="clozeThenCopy">Cloze, then copy-type full sentence</option>
+          </select>
+        </label>
+        <button id="start">Start / Next</button>
+        <button id="speak" class="ghost">🔊 Speak sentence</button>
+      </section>
+
+      <section id="card" class="card hidden">
+        <div id="statusLine" class="statusLine"></div>
+        <p id="sentenceDisplay"></p>
+        <input id="answer" type="text" autocomplete="off" spellcheck="false" placeholder="Type the missing word, then press Enter">
+        <textarea id="copyBox" class="hidden" placeholder="Now type the full sentence, then press Ctrl/Command+Enter"></textarea>
+        <div id="feedback"></div>
+      </section>
+
+      <section id="emptyPractice" class="empty hidden">
+        <p>No vocab saved yet. Switch to <strong>Manage Vocab</strong> to add a term, or import a backup from Settings.</p>
+      </section>
+
+      <section class="stats">
+        <div class="statsHeader">
+          <h2>Terms</h2>
+          <label class="row inline"><input id="statsFilter" type="text" placeholder="Filter terms…"></label>
+        </div>
+        <div class="tableWrap">
+          <table>
+            <thead><tr><th>Term</th><th>Sentences</th><th>Status</th><th>Confidence</th><th>Reviewed</th></tr></thead>
+            <tbody id="termsTable"></tbody>
+          </table>
+        </div>
+      </section>
+    </section>
+
+    <section id="manageTab" class="tabPanel hidden">
+      <section class="manageToolbar">
+        <input id="manageSearch" type="text" placeholder="Search terms or sentences…">
+        <button id="addTermBtn">+ Add term</button>
+      </section>
+
+      <div id="addTermForm" class="addTermForm hidden">
+        <input id="newTermInput" type="text" placeholder="New vocab term…" autocomplete="off">
+        <button id="saveNewTermBtn">Add</button>
+        <button id="cancelNewTermBtn" class="ghost">Cancel</button>
+      </div>
+
+      <section id="emptyManage" class="empty hidden">
+        <p>No vocab terms yet. Add one above to get started.</p>
+      </section>
+
+      <section id="noManageMatches" class="empty hidden">
+        <p>No terms or sentences match your search.</p>
+      </section>
+
+      <div id="vocabList" class="vocabList"></div>
+    </section>
+  </main>
+  <script src="storage.js"></script>
+  <script src="fr-lexicon-index.js"></script>
+  <script src="lexicon.js"></script>
+  <script src="firebase-config.js"></script>
+  <script src="sync.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
