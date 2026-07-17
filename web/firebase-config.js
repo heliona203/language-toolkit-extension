@@ -5,3 +5,9 @@
 // security rules, not on hiding this key.
 const FIREBASE_API_KEY = "";
 const FIREBASE_PROJECT_ID = "";
+
+// The "Web client (auto created by Google Service)" OAuth client that appears
+// in Google Cloud Console → Credentials once the Google sign-in provider is
+// enabled in Firebase Authentication. Needs this page's origin added to its
+// Authorized JavaScript origins.
+const GOOGLE_WEB_CLIENT_ID = "";

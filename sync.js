@@ -52,6 +52,58 @@ async function signIn(email, password) {
   return { ok: true, session };
 }
 
+async function signInWithGoogle() {
+  const redirectUri = chrome.identity.getRedirectURL();
+  const authUrl = "https://accounts.google.com/o/oauth2/v2/auth"
+    + `?client_id=${encodeURIComponent(GOOGLE_EXTENSION_CLIENT_ID)}`
+    + "&response_type=token"
+    + `&redirect_uri=${encodeURIComponent(redirectUri)}`
+    + `&scope=${encodeURIComponent("openid email profile")}`;
+
+  let responseUrl;
+  try {
+    responseUrl = await chrome.identity.launchWebAuthFlow({ url: authUrl, interactive: true });
+  } catch {
+    return { ok: false, error: "Google sign-in was cancelled or failed." };
+  }
+
+  const params = new URLSearchParams(new URL(responseUrl).hash.slice(1));
+  const token = params.get("access_token");
+  if (!token) return { ok: false, error: "Google sign-in did not return a token." };
+
+  return exchangeGoogleToken(token);
+}
+
+async function exchangeGoogleToken(accessToken) {
+  let res;
+  try {
+    res = await fetch(`https://identitytoolkit.googleapis.com/v1/accounts:signInWithIdp?key=${FIREBASE_API_KEY}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        postBody: `access_token=${encodeURIComponent(accessToken)}&providerId=google.com`,
+        requestUri: "http://localhost",
+        returnIdpCredential: true,
+        returnSecureToken: true
+      })
+    });
+  } catch {
+    return { ok: false, error: "Network error — check your connection." };
+  }
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok || !body.idToken) return { ok: false, error: body?.error?.message || "Google sign-in failed." };
+
+  const session = {
+    idToken: body.idToken,
+    refreshToken: body.refreshToken,
+    expiresAt: Date.now() + Number(body.expiresIn) * 1000,
+    uid: body.localId,
+    email: body.email
+  };
+  await setSession(session);
+  return { ok: true, session };
+}
+
 async function signOut() {
   await setSession(null);
 }
@@ -309,6 +361,6 @@ function schedulePush() {
 }
 
 window.sync = {
-  signIn, signOut, getSession, syncNow, schedulePush,
+  signIn, signInWithGoogle, signOut, getSession, syncNow, schedulePush,
   recordTermTombstone, recordSentenceTombstone, getLastSyncedAt
 };

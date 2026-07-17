@@ -13,6 +13,7 @@
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%234f5eff'/%3E%3Ctext x='32' y='43' font-size='30' font-family='sans-serif' font-weight='700' fill='white' text-anchor='middle'%3EL%3C/text%3E%3C/svg%3E">
   <link rel="apple-touch-icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%234f5eff'/%3E%3Ctext x='32' y='43' font-size='30' font-family='sans-serif' font-weight='700' fill='white' text-anchor='middle'%3EL%3C/text%3E%3C/svg%3E">
   <link rel="stylesheet" href="review.css">
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
 </head>
 <body>
   <main>
@@ -64,6 +65,7 @@
           <input id="syncEmail" type="email" autocomplete="username" placeholder="Email">
           <input id="syncPassword" type="password" autocomplete="current-password" placeholder="Password">
           <button id="syncSignIn" type="button" class="ghost">Sign in</button>
+          <button id="syncSignInGoogle" type="button" class="ghost">Sign in with Google</button>
         </div>
         <div id="syncSignedIn" class="dataActions hidden">
           <button id="syncNowBtn" type="button" class="ghost">Sync now</button>

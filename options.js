@@ -323,6 +323,18 @@ document.getElementById("syncSignIn").addEventListener("click", async () => {
   await runSync();
 });
 
+document.getElementById("syncSignInGoogle").addEventListener("click", async () => {
+  const status = document.getElementById("syncStatus");
+  status.textContent = "Signing in with Google…";
+  const result = await window.sync.signInWithGoogle();
+  if (!result.ok) {
+    status.textContent = result.error;
+    return;
+  }
+  await renderSyncUi();
+  await runSync();
+});
+
 document.getElementById("syncSignOut").addEventListener("click", async () => {
   await window.sync.signOut();
   await renderSyncUi();

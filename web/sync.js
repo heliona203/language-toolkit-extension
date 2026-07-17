@@ -54,6 +54,57 @@ async function signIn(email, password) {
   return { ok: true, session };
 }
 
+function requestGoogleAccessToken() {
+  return new Promise((resolve, reject) => {
+    const client = google.accounts.oauth2.initTokenClient({
+      client_id: GOOGLE_WEB_CLIENT_ID,
+      scope: "openid email profile",
+      callback: (response) => response.access_token ? resolve(response.access_token) : reject(new Error("Google sign-in failed."))
+    });
+    client.requestAccessToken();
+  });
+}
+
+async function signInWithGoogle() {
+  let token;
+  try {
+    token = await requestGoogleAccessToken();
+  } catch (err) {
+    return { ok: false, error: err.message };
+  }
+  return exchangeGoogleToken(token);
+}
+
+async function exchangeGoogleToken(accessToken) {
+  let res;
+  try {
+    res = await fetch(`https://identitytoolkit.googleapis.com/v1/accounts:signInWithIdp?key=${FIREBASE_API_KEY}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        postBody: `access_token=${encodeURIComponent(accessToken)}&providerId=google.com`,
+        requestUri: "http://localhost",
+        returnIdpCredential: true,
+        returnSecureToken: true
+      })
+    });
+  } catch {
+    return { ok: false, error: "Network error — check your connection." };
+  }
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok || !body.idToken) return { ok: false, error: body?.error?.message || "Google sign-in failed." };
+
+  const session = {
+    idToken: body.idToken,
+    refreshToken: body.refreshToken,
+    expiresAt: Date.now() + Number(body.expiresIn) * 1000,
+    uid: body.localId,
+    email: body.email
+  };
+  setSession(session);
+  return { ok: true, session };
+}
+
 function signOut() {
   setSession(null);
 }
@@ -292,6 +343,6 @@ function schedulePush() {
 }
 
 window.sync = {
-  signIn, signOut, getSession, syncNow, schedulePush,
+  signIn, signInWithGoogle, signOut, getSession, syncNow, schedulePush,
   recordTermTombstone, recordSentenceTombstone, getLastSyncedAt
 };

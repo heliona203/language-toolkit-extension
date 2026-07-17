@@ -5,3 +5,9 @@
 // security rules, not on hiding this key.
 const FIREBASE_API_KEY = "";
 const FIREBASE_PROJECT_ID = "";
+
+// Google Cloud Console → Credentials → OAuth client ID → Application type
+// "Web application" (a client dedicated to this extension, separate from the
+// web app's client below). Authorized redirect URIs must include this exact
+// extension's chrome.identity.getRedirectURL() value.
+const GOOGLE_EXTENSION_CLIENT_ID = "";

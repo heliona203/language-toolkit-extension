@@ -7,11 +7,13 @@
     "storage",
     "activeTab",
     "tabs",
-    "downloads"
+    "downloads",
+    "identity"
   ],
   "host_permissions": [
     "<all_urls>"
   ],
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA4x/d8SOFa0YxuI4/d+YvuVDQle3ClfTnjz5XwSvcbbVaIDzRvaredHEoqZdsoJCBV5yUisx7YlECpJZWNFN2yXkgQvwbuRvrG/rPGvgMIhNNg2PCaEg1DbyMX9l9fnkOeQYU8TjKdmBmelsoMAnXPL12j6ihGTS5crR8vz9Tr6+rQU+qnegwmt1vqVF8fWYm6Kxq0J+rC1Zh+QLwMdSz9zi3QPmWRTnYlxJfrPqKlnzPonYzDh/zl2Q80oHo6ntSL0p/lnabHoxEJAqliYmC6m1QZR4CecC1PGVTNfiWcV9+8YyAY0DM4gSddOTcCJLXXCeRCgPF80w4rz4pMOTJjQIDAQAB",
   "background": {
     "service_worker": "background.js"
   },

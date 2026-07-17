@@ -120,6 +120,17 @@ document.getElementById("syncSignIn").addEventListener("click", async () => {
   await runSync();
 });
 
+document.getElementById("syncSignInGoogle").addEventListener("click", async () => {
+  syncStatus.textContent = "Signing in with Google…";
+  const result = await window.sync.signInWithGoogle();
+  if (!result.ok) {
+    syncStatus.textContent = result.error;
+    return;
+  }
+  renderSyncUi();
+  await runSync();
+});
+
 document.getElementById("syncSignOut").addEventListener("click", () => {
   window.sync.signOut();
   renderSyncUi();
