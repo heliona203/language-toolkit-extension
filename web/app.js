@@ -248,7 +248,7 @@ async function importVocabJson(file) {
   const merged = { ...window.storage.getVocabTerms(), ...incoming };
   window.storage.setVocabTerms(merged);
   vocabTerms = merged;
-  saveAndRefreshAll();
+  await saveAndRefreshAll();
 }
 
 /* ---------------- Practice tab ---------------- */

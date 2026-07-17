@@ -290,6 +290,7 @@ async function importData(file) {
   const data = await chrome.storage.local.get({ vocabTerms: {} });
   const merged = { ...(data.vocabTerms || {}), ...incoming };
   await chrome.storage.local.set({ vocabTerms: merged });
+  if (await window.sync.getSession()) window.sync.schedulePush();
   document.getElementById("status").textContent = "Imported vocab JSON.";
 }
 
