@@ -232,10 +232,14 @@ async function init() {
     startBackgroundSync();
   }
 
-  window.sync.initAuthBridge(async () => {
+  window.sync.initAuthBridge(async (session) => {
     renderSyncUi();
-    await runSync();
-    startBackgroundSync();
+    if (session) {
+      await runSync();
+      startBackgroundSync();
+    } else {
+      stopBackgroundSync();
+    }
   });
 }
 

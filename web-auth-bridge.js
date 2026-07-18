@@ -1,32 +1,45 @@
 /* Runs only on the companion web app's origin (see manifest.json content_scripts
-   match + popup.js's WEB_APP_URL). Relays the extension's Firebase session from
-   chrome.storage.local into the page via postMessage, so signing in once on the
-   Options page also signs the user into the web app on this same browser —
-   without that, JSON imported on the web app silently stayed local because the
-   user assumed Options sign-in covered both surfaces. Only ever pushes a
-   session *in*; the web app decides whether to adopt it (see web/sync.js). */
+   match + popup.js's WEB_APP_URL). Mirrors the Firebase session between the
+   extension's chrome.storage.local and the web app's localStorage (see
+   web/sync.js), so signing in or out on either surface is reflected on the
+   other instantly, on this same Chrome browser — without this, JSON imported
+   on the web app could silently stay local because the user assumed Options
+   sign-in covered both surfaces.
+
+   AUTH_SESSION_INITIAL vs AUTH_SESSION_CHANGED matters: on first contact (a
+   freshly opened tab), a null session here just means "the extension hasn't
+   signed in on this browser yet" — the web app must not treat that as a
+   live sign-out and wipe a session it already had; it hands its own session
+   over instead. Once past that handshake, AUTH_SESSION_CHANGED reflects a
+   real transition (sign-in or sign-out) and the web app mirrors it exactly. */
 (() => {
   const AUTH_BRIDGE_SOURCE = "language-toolkit-extension";
 
-  function postSession(session) {
-    window.postMessage({ source: AUTH_BRIDGE_SOURCE, type: "AUTH_SESSION", session }, window.location.origin);
+  function postToPage(type, session) {
+    window.postMessage({ source: AUTH_BRIDGE_SOURCE, type, session }, window.location.origin);
   }
 
   async function sendCurrentSession() {
     const { authSession } = await chrome.storage.local.get({ authSession: null });
-    postSession(authSession);
+    postToPage("AUTH_SESSION_INITIAL", authSession);
   }
 
   window.addEventListener("message", (event) => {
     if (event.source !== window || event.origin !== window.location.origin) return;
-    if (event.data?.source === AUTH_BRIDGE_SOURCE && event.data?.type === "REQUEST_AUTH_SESSION") {
+    const data = event.data;
+    if (!data || data.source !== AUTH_BRIDGE_SOURCE) return;
+
+    if (data.type === "REQUEST_AUTH_SESSION") {
       sendCurrentSession();
+    } else if (data.type === "SET_AUTH_SESSION") {
+      if (data.session) chrome.storage.local.set({ authSession: data.session });
+      else chrome.storage.local.remove("authSession");
     }
   });
 
   chrome.storage.onChanged.addListener((changes, area) => {
     if (area === "local" && changes.authSession) {
-      postSession(changes.authSession.newValue || null);
+      postToPage("AUTH_SESSION_CHANGED", changes.authSession.newValue || null);
     }
   });
 
