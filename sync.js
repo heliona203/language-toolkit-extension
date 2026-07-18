@@ -1,8 +1,9 @@
 /* Talks directly to Firebase's REST APIs (no SDK, no build step). Session is
    kept in chrome.storage.local so it survives browser restarts without
-   needing a sign-up flow to recover. options.html and review.html are
-   same-origin (chrome-extension://<id>/...) and share this storage, so
-   signing in once via Options is enough for review.html to sync too. */
+   needing a sign-up flow to recover. options.html, background.js, and
+   content.js are same-origin (chrome-extension://<id>/...) and share this
+   storage, so signing in once via Options is enough for captured-while-
+   browsing vocab to sync too. */
 
 const FIRESTORE_BASE = `https://firestore.googleapis.com/v1/projects/${FIREBASE_PROJECT_ID}/databases/(default)/documents`;
 const AUTH_SIGNIN_URL = `https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=${FIREBASE_API_KEY}`;
