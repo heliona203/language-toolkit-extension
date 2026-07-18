@@ -290,8 +290,19 @@ async function importData(file) {
   const data = await chrome.storage.local.get({ vocabTerms: {} });
   const merged = { ...(data.vocabTerms || {}), ...incoming };
   await chrome.storage.local.set({ vocabTerms: merged });
-  if (await window.sync.getSession()) window.sync.schedulePush();
-  document.getElementById("status").textContent = "Imported vocab JSON.";
+
+  const statusEl = document.getElementById("status");
+  if (await window.sync.getSession()) {
+    const result = await window.sync.syncNow();
+    if (result.ok && !result.pushError) {
+      statusEl.textContent = "Imported vocab JSON and synced to your account.";
+    } else {
+      const reason = result.pushError || result.error || "unknown error";
+      statusEl.textContent = `Imported vocab JSON, but sync failed (${reason}). It won't appear on the web page until sync succeeds.`;
+    }
+  } else {
+    statusEl.textContent = "Imported vocab JSON. Sign in to sync so it appears on the web page.";
+  }
 }
 
 document.getElementById("save").addEventListener("click", save);
