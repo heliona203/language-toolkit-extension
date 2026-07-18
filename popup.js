@@ -65,12 +65,14 @@ document.getElementById("saveSentence").addEventListener("click", async () => {
   document.getElementById("status").textContent = result?.ok ? `Saved for “${result.term}”.` : (result?.error || "Could not save.");
 });
 
+const WEB_APP_URL = "https://heliona203.github.io/language-toolkit-extension/";
+
 document.getElementById("review").addEventListener("click", () => {
-  chrome.tabs.create({ url: chrome.runtime.getURL("review.html") });
+  chrome.tabs.create({ url: WEB_APP_URL });
 });
 
 document.getElementById("manageVocab").addEventListener("click", () => {
-  chrome.tabs.create({ url: chrome.runtime.getURL("review.html#manage") });
+  chrome.tabs.create({ url: `${WEB_APP_URL}#manage` });
 });
 
 document.getElementById("options").addEventListener("click", () => chrome.runtime.openOptionsPage());

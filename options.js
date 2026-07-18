@@ -290,6 +290,7 @@ async function importData(file) {
   const data = await chrome.storage.local.get({ vocabTerms: {} });
   const merged = { ...(data.vocabTerms || {}), ...incoming };
   await chrome.storage.local.set({ vocabTerms: merged });
+  if (await window.sync.getSession()) window.sync.schedulePush();
   document.getElementById("status").textContent = "Imported vocab JSON.";
 }
 
@@ -321,6 +322,7 @@ document.getElementById("syncSignIn").addEventListener("click", async () => {
   passwordInput.value = "";
   await renderSyncUi();
   await runSync();
+  startBackgroundSync();
 });
 
 document.getElementById("syncSignInGoogle").addEventListener("click", async () => {
@@ -333,11 +335,13 @@ document.getElementById("syncSignInGoogle").addEventListener("click", async () =
   }
   await renderSyncUi();
   await runSync();
+  startBackgroundSync();
 });
 
 document.getElementById("syncSignOut").addEventListener("click", async () => {
   await window.sync.signOut();
   await renderSyncUi();
+  stopBackgroundSync();
 });
 
 document.getElementById("syncNowBtn").addEventListener("click", runSync);
@@ -366,5 +370,33 @@ async function runSync() {
   if (result.pushError) status.textContent = `Synced locally, but couldn't push: ${result.pushError}`;
 }
 
+const BACKGROUND_SYNC_INTERVAL_MS = 30000;
+let backgroundSyncTimer = null;
+
+function startBackgroundSync() {
+  if (backgroundSyncTimer) return;
+  backgroundSyncTimer = setInterval(async () => {
+    if (await window.sync.getSession()) await runSync();
+  }, BACKGROUND_SYNC_INTERVAL_MS);
+}
+
+function stopBackgroundSync() {
+  if (!backgroundSyncTimer) return;
+  clearInterval(backgroundSyncTimer);
+  backgroundSyncTimer = null;
+}
+
+document.addEventListener("visibilitychange", async () => {
+  if (document.visibilityState === "visible" && await window.sync.getSession()) await runSync();
+});
+
+async function initSync() {
+  await renderSyncUi();
+  if (await window.sync.getSession()) {
+    await runSync();
+    startBackgroundSync();
+  }
+}
+
 load();
-renderSyncUi();
+initSync();

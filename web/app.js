@@ -118,6 +118,7 @@ document.getElementById("syncSignIn").addEventListener("click", async () => {
   syncPassword.value = "";
   renderSyncUi();
   await runSync();
+  startBackgroundSync();
 });
 
 document.getElementById("syncSignInGoogle").addEventListener("click", async () => {
@@ -129,14 +130,36 @@ document.getElementById("syncSignInGoogle").addEventListener("click", async () =
   }
   renderSyncUi();
   await runSync();
+  startBackgroundSync();
 });
 
 document.getElementById("syncSignOut").addEventListener("click", () => {
   window.sync.signOut();
   renderSyncUi();
+  stopBackgroundSync();
 });
 
 document.getElementById("syncNowBtn").addEventListener("click", runSync);
+
+const BACKGROUND_SYNC_INTERVAL_MS = 30000;
+let backgroundSyncTimer = null;
+
+function startBackgroundSync() {
+  if (backgroundSyncTimer) return;
+  backgroundSyncTimer = setInterval(() => {
+    if (window.sync.getSession()) runSync();
+  }, BACKGROUND_SYNC_INTERVAL_MS);
+}
+
+function stopBackgroundSync() {
+  if (!backgroundSyncTimer) return;
+  clearInterval(backgroundSyncTimer);
+  backgroundSyncTimer = null;
+}
+
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "visible" && window.sync.getSession()) runSync();
+});
 
 init();
 
@@ -204,7 +227,10 @@ async function init() {
   if (location.hash === "#manage") activateTab("manage");
 
   renderSyncUi();
-  if (window.sync.getSession()) await runSync();
+  if (window.sync.getSession()) {
+    await runSync();
+    startBackgroundSync();
+  }
 }
 
 function saveSettingsPanel() {
