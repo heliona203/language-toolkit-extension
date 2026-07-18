@@ -50,6 +50,15 @@
         "styles.css"
       ],
       "run_at": "document_idle"
+    },
+    {
+      "matches": [
+        "https://heliona203.github.io/language-toolkit-extension/*"
+      ],
+      "js": [
+        "web-auth-bridge.js"
+      ],
+      "run_at": "document_idle"
     }
   ]
 }

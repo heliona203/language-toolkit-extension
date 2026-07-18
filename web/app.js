@@ -231,6 +231,12 @@ async function init() {
     await runSync();
     startBackgroundSync();
   }
+
+  window.sync.initAuthBridge(async () => {
+    renderSyncUi();
+    await runSync();
+    startBackgroundSync();
+  });
 }
 
 function saveSettingsPanel() {

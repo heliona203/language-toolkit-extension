@@ -284,6 +284,31 @@ function setLastSyncedAt() {
   localStorage.setItem(LAST_SYNCED_KEY, new Date().toISOString());
 }
 
+/* ---------------- auth bridge (adopt session from the extension, if present) ---------------- */
+
+const AUTH_BRIDGE_SOURCE = "language-toolkit-extension";
+
+function initAuthBridge(onSessionAdopted) {
+  window.addEventListener("message", (event) => {
+    if (event.source !== window || event.origin !== window.location.origin) return;
+    const data = event.data;
+    if (!data || data.source !== AUTH_BRIDGE_SOURCE || data.type !== "AUTH_SESSION") return;
+
+    const bridgedSession = data.session;
+    if (!bridgedSession) return; // extension isn't signed in either; leave the web session as-is
+
+    const current = getSession();
+    if (current && current.uid === bridgedSession.uid && current.idToken === bridgedSession.idToken) return;
+
+    setSession(bridgedSession);
+    onSessionAdopted?.(bridgedSession);
+  });
+
+  // Only a page running inside the extension's content-script match (see
+  // manifest.json) will ever answer this; on any other origin/browser it's a no-op.
+  window.postMessage({ source: AUTH_BRIDGE_SOURCE, type: "REQUEST_AUTH_SESSION" }, window.location.origin);
+}
+
 /* ---------------- orchestration ---------------- */
 
 async function syncNow() {
@@ -344,5 +369,5 @@ function schedulePush() {
 
 window.sync = {
   signIn, signInWithGoogle, signOut, getSession, syncNow, schedulePush,
-  recordTermTombstone, recordSentenceTombstone, getLastSyncedAt
+  recordTermTombstone, recordSentenceTombstone, getLastSyncedAt, initAuthBridge
 };
