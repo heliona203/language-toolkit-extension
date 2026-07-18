@@ -1,5 +1,4 @@
 const SETTINGS_KEY = "languageToolkit.settings";
-const VOCAB_KEY = "languageToolkit.vocabTerms";
 
 const SETTINGS_DEFAULTS = { lang: "fr-FR", audioMode: "sentence", accentMode: "flexible", settingsUpdatedAt: null };
 
@@ -24,18 +23,4 @@ function setSettings(patch) {
   return merged;
 }
 
-// Writes settings as-is, without stamping settingsUpdatedAt — used only by
-// sync.js when adopting an already-timestamped merge result.
-function setSettingsRaw(settings) {
-  localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings || {}));
-}
-
-function getVocabTerms() {
-  return readJson(VOCAB_KEY, {});
-}
-
-function setVocabTerms(vocabTerms) {
-  localStorage.setItem(VOCAB_KEY, JSON.stringify(vocabTerms || {}));
-}
-
-window.storage = { SETTINGS_DEFAULTS, getSettings, setSettings, setSettingsRaw, getVocabTerms, setVocabTerms };
+window.storage = { SETTINGS_DEFAULTS, getSettings, setSettings };

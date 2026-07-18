@@ -15,7 +15,7 @@ const DEFAULTS = {
   ]
 };
 
-importScripts("data/fr-lexicon-index.js");
+importScripts("data/fr-lexicon-index.js", "firebase-config.js", "sync.js");
 
 chrome.commands.onCommand.addListener(async (command) => {
   if (command === "open_vocab_lookup") await openLookupForSelectedTerm();
@@ -50,6 +50,15 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     if (message.type === "GET_PENDING_TERM") {
       const data = await chrome.storage.local.get({ pendingVocabTerm: "" });
       return sendResponse({ ok: true, term: data.pendingVocabTerm || "" });
+    }
+
+    if (message.type === "GET_VOCAB_TERMS") {
+      try {
+        const vocabTerms = await sync.getVocabTerms();
+        return sendResponse({ ok: true, vocabTerms });
+      } catch (err) {
+        return sendResponse({ ok: false, error: err.message });
+      }
     }
   })();
 
@@ -91,13 +100,14 @@ async function saveSelectedSentenceForPendingTerm() {
   const term = cleanTerm(response.term || data.pendingVocabTerm || "");
   if (!term) return;
 
-  await saveSentenceRecord({
+  const result = await saveSentenceRecord({
     term,
     sentence: response.sentence,
     sourceUrl: response.sourceUrl,
     sourceTitle: response.sourceTitle,
     sourceSite: response.sourceSite
   });
+  if (!result.ok) console.error("Keyboard-shortcut sentence save failed:", result.error);
 }
 
 async function setPendingTerm(term) {
@@ -198,8 +208,7 @@ async function saveSentenceRecord(payload) {
   if (!term || !sentence) return { ok: false, error: "Missing term or sentence." };
 
   const now = new Date().toISOString();
-  const data = await chrome.storage.local.get({ vocabTerms: {} });
-  const vocabTerms = data.vocabTerms || {};
+  const vocabTerms = await sync.getVocabTerms();
   const normalizedTerm = normalizeTerm(term);
   const key = normalizedTerm.key;
 
@@ -236,8 +245,14 @@ async function saveSentenceRecord(payload) {
   vocabTerms[key].lexicalEntry ||= await resolveLexicalEntry(term);
   vocabTerms[key].forms = mergeUniqueForms(vocabTerms[key].forms, vocabTerms[key].lexicalEntry.forms);
   vocabTerms[key].updatedAt = now;
-  await chrome.storage.local.set({ vocabTerms, pendingVocabTerm: term });
-  return { ok: true, term, count: vocabTerms[key].sentences.length };
+  const savedCount = vocabTerms[key].sentences.length;
+  try {
+    await sync.setVocabTerms(vocabTerms);
+  } catch (err) {
+    return { ok: false, error: `Couldn't save — ${err.message}` };
+  }
+  await chrome.storage.local.set({ pendingVocabTerm: term });
+  return { ok: true, term, count: savedCount };
 }
 
 async function createVocabTermRecord(payload) {
@@ -246,8 +261,7 @@ async function createVocabTermRecord(payload) {
 
   const now = new Date().toISOString();
   const normalizedTerm = normalizeTerm(term);
-  const data = await chrome.storage.local.get({ vocabTerms: {} });
-  const vocabTerms = data.vocabTerms || {};
+  const vocabTerms = await sync.getVocabTerms();
 
   if (vocabTerms[normalizedTerm.key]) {
     return { ok: false, error: `"${vocabTerms[normalizedTerm.key].term}" already exists.`, key: normalizedTerm.key };
@@ -268,7 +282,12 @@ async function createVocabTermRecord(payload) {
     sentences: []
   };
 
-  await chrome.storage.local.set({ vocabTerms, pendingVocabTerm: term });
+  try {
+    await sync.setVocabTerms(vocabTerms);
+  } catch (err) {
+    return { ok: false, error: `Couldn't save — ${err.message}` };
+  }
+  await chrome.storage.local.set({ pendingVocabTerm: term });
   return { ok: true, key: normalizedTerm.key, term, lexicalEntry };
 }
 

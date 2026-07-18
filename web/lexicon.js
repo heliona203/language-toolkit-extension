@@ -527,7 +527,7 @@ async function createVocabTermRecord(payload) {
 
   const now = new Date().toISOString();
   const normalizedTerm = normalizeTerm(term);
-  const vocabTerms = window.storage.getVocabTerms();
+  const vocabTerms = await window.sync.getVocabTerms();
 
   if (vocabTerms[normalizedTerm.key]) {
     return { ok: false, error: `"${vocabTerms[normalizedTerm.key].term}" already exists.`, key: normalizedTerm.key };
@@ -548,7 +548,7 @@ async function createVocabTermRecord(payload) {
     sentences: []
   };
 
-  window.storage.setVocabTerms(vocabTerms);
+  await window.sync.setVocabTerms(vocabTerms);
   return { ok: true, key: normalizedTerm.key, term, lexicalEntry };
 }
 

@@ -155,7 +155,7 @@
 
     <section>
       <h2>Storage</h2>
-      <p class="hint">Saved vocabulary is local to Chrome by default. Export/import keeps a readable backup file that feels more tangible than hidden browser storage.</p>
+      <p class="hint">While signed out, saved vocabulary is local to Chrome. Export/import keeps a readable backup file that feels more tangible than hidden browser storage.</p>
       <button id="exportData" type="button">Export vocab JSON</button>
       <label class="fileLabel">
         Import vocab JSON
@@ -165,7 +165,7 @@
 
     <section>
       <h2>Sync</h2>
-      <p class="hint">Sign in with the account you created in the Firebase console to keep vocab in sync with the phone web app. Signing in here also lets the Vocab Toolkit tab (Review page) sync automatically.</p>
+      <p class="hint">Sign in with the account you created in the Firebase console to keep vocab in sync with the phone web app. Signing in moves any vocab saved in Chrome to your account and clears it from Chrome's local storage — from then on your vocab lives only in the cloud, so you'll need a connection to load or save it. Signing in here also lets the Vocab Toolkit tab (Review page) use the same account.</p>
       <div id="syncSignedOut">
         <label>Email <input id="syncEmail" type="email" autocomplete="username"></label>
         <label>Password <input id="syncPassword" type="password" autocomplete="current-password"></label>
@@ -173,7 +173,7 @@
         <button id="syncSignInGoogle" type="button">Sign in with Google</button>
       </div>
       <div id="syncSignedIn" class="row hidden">
-        <button id="syncNowBtn" type="button">Sync now</button>
+        <button id="syncNowBtn" type="button">Refresh from cloud</button>
         <button id="syncSignOut" type="button">Sign out</button>
       </div>
       <p id="syncStatus" class="hint"></p>

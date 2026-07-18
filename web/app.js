@@ -152,22 +152,17 @@ function renderSyncUi() {
 }
 
 async function runSync() {
-  syncStatus.textContent = "Syncing…";
-  const result = await window.sync.syncNow();
-  if (!result.ok) {
-    syncStatus.textContent = `Sync failed: ${result.error}`;
+  syncStatus.textContent = "Refreshing…";
+  try {
+    vocabTerms = await window.sync.getVocabTerms();
+  } catch (err) {
+    syncStatus.textContent = `Couldn't refresh: ${err.message}`;
     return;
   }
-  vocabTerms = window.storage.getVocabTerms();
-  settings = window.storage.getSettings();
-  settingsLang.value = settings.lang;
-  settingsAudioMode.value = settings.audioMode;
-  settingsAccentMode.value = settings.accentMode;
   renderTermSelect();
   renderTable();
   renderVocabList();
   renderSyncUi();
-  if (result.pushError) syncStatus.textContent = `Synced locally, but couldn't push: ${result.pushError}`;
 }
 
 function activateTab(name) {
@@ -186,7 +181,12 @@ async function init() {
   settingsAudioMode.value = settings.audioMode;
   settingsAccentMode.value = settings.accentMode;
 
-  vocabTerms = window.storage.getVocabTerms();
+  try {
+    vocabTerms = await window.sync.getVocabTerms();
+  } catch (err) {
+    dataStatus.textContent = `Couldn't load your vocab: ${err.message}`;
+    vocabTerms = {};
+  }
   renderTermSelect();
   renderTable();
   renderVocabList();
@@ -204,7 +204,6 @@ async function init() {
   if (location.hash === "#manage") activateTab("manage");
 
   renderSyncUi();
-  if (window.sync.getSession()) await runSync();
 }
 
 function saveSettingsPanel() {
@@ -217,16 +216,27 @@ function saveSettingsPanel() {
 }
 
 async function persist() {
-  window.storage.setVocabTerms(vocabTerms);
-  if (window.sync.getSession()) window.sync.schedulePush();
+  try {
+    vocabTerms = await window.sync.setVocabTerms(vocabTerms);
+  } catch (err) {
+    console.error("Failed to save vocab:", err);
+    dataStatus.textContent = `Couldn't save: ${err.message}`;
+  }
 }
 
-function exportVocabJson() {
+async function exportVocabJson() {
+  let terms;
+  try {
+    terms = await window.sync.getVocabTerms();
+  } catch (err) {
+    dataStatus.textContent = `Couldn't export: ${err.message}`;
+    return;
+  }
   const payload = {
     app: "Inline Language Toolkit",
     schemaVersion: 1,
     exportedAt: new Date().toISOString(),
-    vocabTerms: window.storage.getVocabTerms()
+    vocabTerms: terms
   };
   const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
   const url = URL.createObjectURL(blob);
@@ -245,10 +255,12 @@ async function importVocabJson(file) {
   const payload = JSON.parse(text);
   const incoming = payload.vocabTerms || payload;
   if (!incoming || typeof incoming !== "object") throw new Error("No vocabTerms object found.");
-  const merged = { ...window.storage.getVocabTerms(), ...incoming };
-  window.storage.setVocabTerms(merged);
-  vocabTerms = merged;
-  await saveAndRefreshAll();
+  // Calls setVocabTerms directly (not persist()/saveAndRefreshAll()) so a
+  // save failure propagates to the caller instead of being swallowed —
+  // otherwise the "Imported vocab JSON." message could show even though
+  // the save never reached storage.
+  vocabTerms = await window.sync.setVocabTerms({ ...vocabTerms, ...incoming });
+  refreshUi();
 }
 
 /* ---------------- Practice tab ---------------- */
@@ -565,7 +577,7 @@ async function commitAddTerm() {
     return;
   }
 
-  vocabTerms = window.storage.getVocabTerms();
+  vocabTerms = await window.sync.getVocabTerms();
   currentTermKey = createResult.key;
   termSelect.value = currentTermKey;
 
@@ -723,8 +735,7 @@ function deleteSentence(key, id) {
   saveAndRefreshAll();
 }
 
-async function saveAndRefreshAll() {
-  await persist();
+function refreshUi() {
   renderTermSelect();
   renderTable();
   renderVocabList();
@@ -739,6 +750,11 @@ async function saveAndRefreshAll() {
     emptyPractice.classList.remove("hidden");
     card.classList.add("hidden");
   }
+}
+
+async function saveAndRefreshAll() {
+  await persist();
+  refreshUi();
 }
 
 function renderVocabList() {

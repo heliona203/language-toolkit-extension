@@ -268,12 +268,18 @@ async function save() {
 }
 
 async function exportData() {
-  const data = await chrome.storage.local.get({ vocabTerms: {}, pendingVocabTerm: "" });
+  let vocabTerms;
+  try {
+    vocabTerms = await window.sync.getVocabTerms();
+  } catch (err) {
+    document.getElementById("status").textContent = `Export failed: ${err.message}`;
+    return;
+  }
   const payload = {
     app: "Inline Language Toolkit",
     schemaVersion: 1,
     exportedAt: new Date().toISOString(),
-    vocabTerms: data.vocabTerms || {}
+    vocabTerms
   };
   const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
   const url = URL.createObjectURL(blob);
@@ -287,10 +293,8 @@ async function importData(file) {
   const payload = JSON.parse(text);
   const incoming = payload.vocabTerms || payload;
   if (!incoming || typeof incoming !== "object") throw new Error("No vocabTerms object found.");
-  const data = await chrome.storage.local.get({ vocabTerms: {} });
-  const merged = { ...(data.vocabTerms || {}), ...incoming };
-  await chrome.storage.local.set({ vocabTerms: merged });
-  if (await window.sync.getSession()) window.sync.schedulePush();
+  const current = await window.sync.getVocabTerms();
+  await window.sync.setVocabTerms({ ...current, ...incoming });
   document.getElementById("status").textContent = "Imported vocab JSON.";
 }
 
@@ -357,14 +361,14 @@ async function renderSyncUi() {
 
 async function runSync() {
   const status = document.getElementById("syncStatus");
-  status.textContent = "Syncing…";
-  const result = await window.sync.syncNow();
-  if (!result.ok) {
-    status.textContent = `Sync failed: ${result.error}`;
+  status.textContent = "Refreshing…";
+  try {
+    await window.sync.getVocabTerms();
+  } catch (err) {
+    status.textContent = `Refresh failed: ${err.message}`;
     return;
   }
   await renderSyncUi();
-  if (result.pushError) status.textContent = `Synced locally, but couldn't push: ${result.pushError}`;
 }
 
 load();

@@ -1,21 +1,33 @@
 /* Talks directly to Firebase's REST APIs (no SDK, no build step). Mirrors
-   ../sync.js (the extension's version) but backed by localStorage/window.storage
-   instead of chrome.storage — kept as a near-duplicate rather than a shared
-   module, matching this repo's existing style. */
+   ../sync.js (the extension's version) but backed by localStorage instead
+   of chrome.storage.
+
+   Vocab data itself is NOT kept in localStorage once signed in:
+   getVocabTerms()/setVocabTerms() talk to Firestore directly on every call,
+   so Firestore is the single copy of a signed-in user's vocab. Anonymous
+   (signed-out) users keep using localStorage as before. The first time a
+   session is seen with leftover anonymous data still on disk, that data is
+   merged into Firestore and then erased locally (see
+   migrateAnonymousDataToRemote). settings stay in localStorage and are out
+   of scope here. */
 
 const FIRESTORE_BASE = `https://firestore.googleapis.com/v1/projects/${FIREBASE_PROJECT_ID}/databases/(default)/documents`;
 const AUTH_SIGNIN_URL = `https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=${FIREBASE_API_KEY}`;
 const AUTH_REFRESH_URL = `https://securetoken.googleapis.com/v1/token?key=${FIREBASE_API_KEY}`;
 
 const AUTH_SESSION_KEY = "languageToolkit.authSession";
+const VOCAB_KEY = "languageToolkit.vocabTerms";
 const DELETED_KEYS_KEY = "languageToolkit.deletedKeys";
 const LAST_SYNCED_KEY = "languageToolkit.lastSyncedAt";
 
 const TOMBSTONE_MAX_AGE_MS = 90 * 24 * 60 * 60 * 1000;
 const REFRESH_MARGIN_MS = 5 * 60 * 1000;
-const PUSH_DEBOUNCE_MS = 1000;
 
-let pushTimer = null;
+// Tombstones recorded while signed in, waiting to be folded into the next
+// setVocabTerms() push (mirrors how the anonymous path stages them in
+// localStorage until the next persist()).
+let pendingTombstones = [];
+let migratePromise = null;
 
 /* ---------------- session ---------------- */
 
@@ -107,6 +119,7 @@ async function exchangeGoogleToken(accessToken) {
 
 function signOut() {
   setSession(null);
+  pendingTombstones = [];
 }
 
 async function refreshIdToken(refreshToken) {
@@ -167,19 +180,30 @@ async function fetchRemoteDoc(idToken, uid) {
   };
 }
 
-async function pushRemoteDoc(idToken, uid, { vocabTerms, settings, deletedKeys }) {
-  const url = `${docPath(uid)}?updateMask.fieldPaths=vocabTerms&updateMask.fieldPaths=settings&updateMask.fieldPaths=deletedKeys&updateMask.fieldPaths=updatedAt`;
+// `patch` may include any subset of {vocabTerms, settings, deletedKeys} —
+// only the fields present are sent, so e.g. a vocab-only save can't clobber
+// a value it never read.
+async function pushRemoteDoc(idToken, uid, patch) {
+  const fieldPaths = ["updatedAt"];
+  const fields = { updatedAt: { timestampValue: new Date().toISOString() } };
+  if ("vocabTerms" in patch) {
+    fieldPaths.push("vocabTerms");
+    fields.vocabTerms = { stringValue: JSON.stringify(patch.vocabTerms || {}) };
+  }
+  if ("settings" in patch) {
+    fieldPaths.push("settings");
+    fields.settings = { stringValue: JSON.stringify(patch.settings || {}) };
+  }
+  if ("deletedKeys" in patch) {
+    fieldPaths.push("deletedKeys");
+    fields.deletedKeys = { stringValue: JSON.stringify(patch.deletedKeys || {}) };
+  }
+
+  const url = `${docPath(uid)}?${fieldPaths.map(fp => `updateMask.fieldPaths=${fp}`).join("&")}`;
   const res = await fetch(url, {
     method: "PATCH",
     headers: { Authorization: `Bearer ${idToken}`, "Content-Type": "application/json" },
-    body: JSON.stringify({
-      fields: {
-        vocabTerms: { stringValue: JSON.stringify(vocabTerms || {}) },
-        settings: { stringValue: JSON.stringify(settings || {}) },
-        deletedKeys: { stringValue: JSON.stringify(deletedKeys || {}) },
-        updatedAt: { timestampValue: new Date().toISOString() }
-      }
-    })
+    body: JSON.stringify({ fields })
   });
   if (!res.ok) throw new Error(`Push failed: ${res.status}`);
 }
@@ -247,33 +271,32 @@ function mergeVocabTerms(local, remote, deletedKeys) {
   return merged;
 }
 
-function mergeSettings(localSettings, remoteSettings) {
-  const localAt = new Date(localSettings?.settingsUpdatedAt || 0);
-  const remoteAt = new Date(remoteSettings?.settingsUpdatedAt || 0);
-  if (remoteSettings && remoteAt > localAt) return remoteSettings;
-  return localSettings;
+/* ---------------- local storage (localStorage) — anonymous path only ---------------- */
+
+function getLocalVocabTerms() {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(VOCAB_KEY) || "{}");
+    return parsed && typeof parsed === "object" ? parsed : {};
+  } catch {
+    return {};
+  }
 }
 
-/* ---------------- local storage (localStorage) ---------------- */
+function setLocalVocabTerms(vocabTerms) {
+  localStorage.setItem(VOCAB_KEY, JSON.stringify(vocabTerms || {}));
+}
 
 function getLocalDeletedKeys() {
-  try { return JSON.parse(localStorage.getItem(DELETED_KEYS_KEY) || "{}"); } catch { return {}; }
+  try {
+    const parsed = JSON.parse(localStorage.getItem(DELETED_KEYS_KEY) || "{}");
+    return parsed && typeof parsed === "object" ? parsed : {};
+  } catch {
+    return {};
+  }
 }
 
 function setLocalDeletedKeys(deletedKeys) {
   localStorage.setItem(DELETED_KEYS_KEY, JSON.stringify(deletedKeys || {}));
-}
-
-function recordTermTombstone(key) {
-  const deletedKeys = getLocalDeletedKeys();
-  deletedKeys[key] = new Date().toISOString();
-  setLocalDeletedKeys(deletedKeys);
-}
-
-function recordSentenceTombstone(termKey, sentenceId) {
-  const deletedKeys = getLocalDeletedKeys();
-  deletedKeys[`${termKey}/${sentenceId}`] = new Date().toISOString();
-  setLocalDeletedKeys(deletedKeys);
 }
 
 function getLastSyncedAt() {
@@ -284,65 +307,102 @@ function setLastSyncedAt() {
   localStorage.setItem(LAST_SYNCED_KEY, new Date().toISOString());
 }
 
-/* ---------------- orchestration ---------------- */
+/* ---------------- one-time migration off localStorage ---------------- */
 
-async function syncNow() {
-  const session = await ensureFreshIdToken();
-  if (!session) return { ok: false, error: "Not signed in." };
+// Runs the first time a signed-in call sees leftover anonymous data on disk:
+// merges it into Firestore, then erases it locally so localStorage stops
+// being a copy of the vocab. Safe to call repeatedly — it's a no-op once
+// there's nothing local left, and if the push fails (e.g. offline) the local
+// copy is left alone so nothing is lost; the next call retries.
+async function migrateAnonymousDataToRemote(session) {
+  if (!migratePromise) migratePromise = runMigration(session).finally(() => { migratePromise = null; });
+  return migratePromise;
+}
 
-  let remoteDoc;
+async function runMigration(session) {
+  const localVocabTerms = getLocalVocabTerms();
+  const localDeletedKeys = getLocalDeletedKeys();
+  if (!Object.keys(localVocabTerms).length && !Object.keys(localDeletedKeys).length) return;
+
+  let remoteDoc = null;
   try {
     remoteDoc = await fetchRemoteDoc(session.idToken, session.uid);
-  } catch (err) {
-    return { ok: false, error: err.message };
+  } catch {
+    return;
   }
-
-  const localVocabTerms = window.storage.getVocabTerms();
-  const localDeletedKeys = getLocalDeletedKeys();
-  const localSettings = window.storage.getSettings();
 
   const mergedDeletedKeys = mergeDeletedKeys(localDeletedKeys, remoteDoc?.deletedKeys);
   const mergedVocabTerms = mergeVocabTerms(localVocabTerms, remoteDoc?.vocabTerms, mergedDeletedKeys);
-  const mergedSettings = mergeSettings(localSettings, remoteDoc?.settings);
-
-  window.storage.setVocabTerms(mergedVocabTerms);
-  setLocalDeletedKeys(mergedDeletedKeys);
-  if (mergedSettings !== localSettings) window.storage.setSettingsRaw(mergedSettings);
 
   try {
-    await pushRemoteDoc(session.idToken, session.uid, {
-      vocabTerms: mergedVocabTerms,
-      settings: mergedSettings,
-      deletedKeys: mergedDeletedKeys
-    });
-  } catch (err) {
-    return { ok: true, vocabTerms: mergedVocabTerms, pushError: err.message };
+    await pushRemoteDoc(session.idToken, session.uid, { vocabTerms: mergedVocabTerms, deletedKeys: mergedDeletedKeys });
+  } catch {
+    return;
   }
 
+  localStorage.removeItem(VOCAB_KEY);
+  localStorage.removeItem(DELETED_KEYS_KEY);
   setLastSyncedAt();
-  return { ok: true, vocabTerms: mergedVocabTerms };
 }
 
-function schedulePush() {
-  if (pushTimer) clearTimeout(pushTimer);
-  pushTimer = setTimeout(async () => {
-    pushTimer = null;
-    const session = await ensureFreshIdToken();
-    if (!session) return;
-    try {
-      await pushRemoteDoc(session.idToken, session.uid, {
-        vocabTerms: window.storage.getVocabTerms(),
-        settings: window.storage.getSettings(),
-        deletedKeys: getLocalDeletedKeys()
-      });
-      setLastSyncedAt();
-    } catch {
-      // best-effort; the next syncNow()/schedulePush() will retry
-    }
-  }, PUSH_DEBOUNCE_MS);
+/* ---------------- public vocab API ---------------- */
+
+function pendingTombstonesAsMap() {
+  const map = {};
+  for (const { key, at } of pendingTombstones) map[key] = at;
+  return map;
+}
+
+async function getVocabTerms() {
+  const session = await ensureFreshIdToken();
+  if (!session) return getLocalVocabTerms();
+
+  await migrateAnonymousDataToRemote(session);
+
+  const remoteDoc = await fetchRemoteDoc(session.idToken, session.uid);
+  return remoteDoc?.vocabTerms || {};
+}
+
+async function setVocabTerms(vocabTerms) {
+  const session = await ensureFreshIdToken();
+  if (!session) {
+    setLocalVocabTerms(vocabTerms);
+    return vocabTerms;
+  }
+
+  await migrateAnonymousDataToRemote(session);
+
+  const remoteDoc = await fetchRemoteDoc(session.idToken, session.uid);
+  const mergedDeletedKeys = mergeDeletedKeys(pendingTombstonesAsMap(), remoteDoc?.deletedKeys);
+  const mergedVocabTerms = mergeVocabTerms(vocabTerms, remoteDoc?.vocabTerms, mergedDeletedKeys);
+
+  await pushRemoteDoc(session.idToken, session.uid, { vocabTerms: mergedVocabTerms, deletedKeys: mergedDeletedKeys });
+  pendingTombstones = [];
+  setLastSyncedAt();
+  return mergedVocabTerms;
+}
+
+async function recordTombstone(key) {
+  const session = await ensureFreshIdToken();
+  if (!session) {
+    const deletedKeys = getLocalDeletedKeys();
+    deletedKeys[key] = new Date().toISOString();
+    setLocalDeletedKeys(deletedKeys);
+    return;
+  }
+  pendingTombstones.push({ key, at: new Date().toISOString() });
+}
+
+function recordTermTombstone(key) {
+  return recordTombstone(key);
+}
+
+function recordSentenceTombstone(termKey, sentenceId) {
+  return recordTombstone(`${termKey}/${sentenceId}`);
 }
 
 window.sync = {
-  signIn, signInWithGoogle, signOut, getSession, syncNow, schedulePush,
+  signIn, signInWithGoogle, signOut, getSession,
+  getVocabTerms, setVocabTerms,
   recordTermTombstone, recordSentenceTombstone, getLastSyncedAt
 };

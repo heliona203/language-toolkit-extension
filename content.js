@@ -956,8 +956,11 @@
   async function openHoverCapturePanel(sentenceText, x, y) {
     closeHoverCapturePanel();
 
-    const data = await chrome.storage.local.get({ vocabTerms: {}, pendingVocabTerm: "" });
-    const existingTerms = Object.values(data.vocabTerms || {})
+    const [data, vocabTermsResult] = await Promise.all([
+      chrome.storage.local.get({ pendingVocabTerm: "" }),
+      chrome.runtime.sendMessage({ type: "GET_VOCAB_TERMS" })
+    ]);
+    const existingTerms = Object.values(vocabTermsResult?.ok ? vocabTermsResult.vocabTerms : {})
       .map(entry => entry.term)
       .sort((a, b) => a.localeCompare(b));
 

@@ -93,8 +93,12 @@ function activateTab(name) {
 
 async function init() {
   settings = await chrome.storage.sync.get(DEFAULTS);
-  const data = await chrome.storage.local.get({ vocabTerms: {} });
-  vocabTerms = data.vocabTerms || {};
+  try {
+    vocabTerms = await window.sync.getVocabTerms();
+  } catch (err) {
+    statusLine.textContent = `Couldn't load your vocab: ${err.message}`;
+    vocabTerms = {};
+  }
   renderTermSelect();
   renderTable();
   renderVocabList();
@@ -110,22 +114,14 @@ async function init() {
   }
 
   if (location.hash === "#manage") activateTab("manage");
-
-  if (await window.sync.getSession()) {
-    const result = await window.sync.syncNow();
-    if (result.ok) {
-      vocabTerms = result.vocabTerms;
-      settings = await chrome.storage.sync.get(DEFAULTS);
-      renderTermSelect();
-      renderTable();
-      renderVocabList();
-    }
-  }
 }
 
 async function persist() {
-  await chrome.storage.local.set({ vocabTerms });
-  if (await window.sync.getSession()) window.sync.schedulePush();
+  try {
+    vocabTerms = await window.sync.setVocabTerms(vocabTerms);
+  } catch (err) {
+    console.error("Failed to save vocab:", err);
+  }
 }
 
 /* ---------------- Practice tab ---------------- */
@@ -445,8 +441,7 @@ async function commitAddTerm() {
     return;
   }
 
-  const data = await chrome.storage.local.get({ vocabTerms: {} });
-  vocabTerms = data.vocabTerms || {};
+  vocabTerms = await window.sync.getVocabTerms();
   currentTermKey = createResult.key;
   termSelect.value = currentTermKey;
 
