@@ -51,6 +51,7 @@ async function signIn(email, password) {
     email: body.email
   };
   setSession(session);
+  broadcastSessionToExtension(session);
   return { ok: true, session };
 }
 
@@ -102,11 +103,13 @@ async function exchangeGoogleToken(accessToken) {
     email: body.email
   };
   setSession(session);
+  broadcastSessionToExtension(session);
   return { ok: true, session };
 }
 
 function signOut() {
   setSession(null);
+  broadcastSessionToExtension(null);
 }
 
 async function refreshIdToken(refreshToken) {
@@ -284,6 +287,55 @@ function setLastSyncedAt() {
   localStorage.setItem(LAST_SYNCED_KEY, new Date().toISOString());
 }
 
+/* ---------------- auth bridge (mirror sign-in/out with the extension, if present) ---------------- */
+
+const AUTH_BRIDGE_SOURCE = "language-toolkit-extension";
+
+function sessionsMatch(a, b) {
+  if (!a && !b) return true;
+  if (!a || !b) return false;
+  return a.uid === b.uid && a.idToken === b.idToken;
+}
+
+function broadcastSessionToExtension(session) {
+  // Only a page running inside the extension's content-script match (see
+  // manifest.json) will ever answer this; on any other origin/browser it's a no-op.
+  window.postMessage({ source: AUTH_BRIDGE_SOURCE, type: "SET_AUTH_SESSION", session }, window.location.origin);
+}
+
+function initAuthBridge(onSessionAdopted) {
+  window.addEventListener("message", (event) => {
+    if (event.source !== window || event.origin !== window.location.origin) return;
+    const data = event.data;
+    if (!data || data.source !== AUTH_BRIDGE_SOURCE) return;
+
+    if (data.type === "AUTH_SESSION_INITIAL") {
+      const bridgedSession = data.session;
+      const current = getSession();
+      if (sessionsMatch(current, bridgedSession)) return;
+      if (bridgedSession) {
+        setSession(bridgedSession);
+        onSessionAdopted?.(bridgedSession);
+      } else if (current) {
+        // Extension hasn't signed in on this browser yet, but this page already
+        // has — hand it over instead of treating the extension's blank state as a sign-out.
+        broadcastSessionToExtension(current);
+      }
+      return;
+    }
+
+    if (data.type === "AUTH_SESSION_CHANGED") {
+      const bridgedSession = data.session;
+      const current = getSession();
+      if (sessionsMatch(current, bridgedSession)) return;
+      setSession(bridgedSession);
+      onSessionAdopted?.(bridgedSession);
+    }
+  });
+
+  window.postMessage({ source: AUTH_BRIDGE_SOURCE, type: "REQUEST_AUTH_SESSION" }, window.location.origin);
+}
+
 /* ---------------- orchestration ---------------- */
 
 async function syncNow() {
@@ -344,5 +396,5 @@ function schedulePush() {
 
 window.sync = {
   signIn, signInWithGoogle, signOut, getSession, syncNow, schedulePush,
-  recordTermTombstone, recordSentenceTombstone, getLastSyncedAt
+  recordTermTombstone, recordSentenceTombstone, getLastSyncedAt, initAuthBridge
 };

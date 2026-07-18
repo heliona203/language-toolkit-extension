@@ -331,9 +331,6 @@ document.getElementById("syncSignIn").addEventListener("click", async () => {
     return;
   }
   passwordInput.value = "";
-  await renderSyncUi();
-  await runSync();
-  startBackgroundSync();
 });
 
 document.getElementById("syncSignInGoogle").addEventListener("click", async () => {
@@ -344,18 +341,31 @@ document.getElementById("syncSignInGoogle").addEventListener("click", async () =
     status.textContent = result.error;
     return;
   }
-  await renderSyncUi();
-  await runSync();
-  startBackgroundSync();
 });
 
 document.getElementById("syncSignOut").addEventListener("click", async () => {
   await window.sync.signOut();
-  await renderSyncUi();
-  stopBackgroundSync();
 });
 
 document.getElementById("syncNowBtn").addEventListener("click", runSync);
+
+// Reacts to authSession changes from any source: this page's own buttons above,
+// another options.html tab, or the web app (see web-auth-bridge.js) — so sign-in
+// and sign-out are reflected here instantly regardless of where they happened.
+chrome.storage.onChanged.addListener((changes, area) => {
+  if (area !== "local" || !changes.authSession) return;
+  onAuthSessionChanged(changes.authSession.newValue || null);
+});
+
+async function onAuthSessionChanged(session) {
+  await renderSyncUi();
+  if (session) {
+    await runSync();
+    startBackgroundSync();
+  } else {
+    stopBackgroundSync();
+  }
+}
 
 async function renderSyncUi() {
   const session = await window.sync.getSession();
