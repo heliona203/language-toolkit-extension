@@ -1,3 +1,7 @@
+// Load the REST sync implementation here too so Google OAuth can be launched
+// from the service worker on behalf of the companion web page.
+importScripts("firebase-config.js", "sync.js");
+
 const DEFAULTS = {
   mode: "normal",
   lang: "fr-FR",
@@ -50,6 +54,31 @@ chrome.runtime.onStartup.addListener(() => { installWebAuthBridges(); });
 
 chrome.storage.onChanged.addListener((changes, area) => {
   if (area === "local" && changes.authSession) installWebAuthBridges(true);
+});
+
+// Content scripts are isolated from both the page and this worker. Expose only
+// the non-secret Firebase connection values to the companion origin so a web
+// tab signed in through the extension uses the same Firestore project.
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (message?.type === "LANGUAGE_TOOLKIT_GET_SYNC_CONFIG") {
+    if (!sender.tab?.url?.startsWith("https://heliona203.github.io/language-toolkit-extension/")) {
+      sendResponse({ ok: false });
+      return;
+    }
+    sendResponse({ ok: true, apiKey: FIREBASE_API_KEY, projectId: FIREBASE_PROJECT_ID });
+    return;
+  }
+
+  if (message?.type === "LANGUAGE_TOOLKIT_GOOGLE_SIGN_IN") {
+    if (!sender.tab?.url?.startsWith("https://heliona203.github.io/language-toolkit-extension/")) {
+      sendResponse({ ok: false, error: "Google sign-in is only available on the companion web app." });
+      return;
+    }
+    globalThis.sync.signInWithGoogle().then(sendResponse, (err) => {
+      sendResponse({ ok: false, error: err.message || "Google sign-in failed." });
+    });
+    return true;
+  }
 });
 
 chrome.commands.onCommand.addListener(async (command) => {
