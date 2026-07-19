@@ -56,6 +56,12 @@ async function signIn(email, password) {
 }
 
 function requestGoogleAccessToken() {
+  if (!GOOGLE_WEB_CLIENT_ID) {
+    return Promise.reject(new Error("Google sign-in is not configured for this web app."));
+  }
+  if (!globalThis.google?.accounts?.oauth2) {
+    return Promise.reject(new Error("Google sign-in is still loading. Please try again."));
+  }
   return new Promise((resolve, reject) => {
     const client = google.accounts.oauth2.initTokenClient({
       client_id: GOOGLE_WEB_CLIENT_ID,
@@ -84,7 +90,7 @@ async function exchangeGoogleToken(accessToken) {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         postBody: `access_token=${encodeURIComponent(accessToken)}&providerId=google.com`,
-        requestUri: "http://localhost",
+        requestUri: window.location.origin,
         returnIdpCredential: true,
         returnSecureToken: true
       })

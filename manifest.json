@@ -8,7 +8,8 @@
     "activeTab",
     "tabs",
     "downloads",
-    "identity"
+    "identity",
+    "scripting"
   ],
   "host_permissions": [
     "<all_urls>"
