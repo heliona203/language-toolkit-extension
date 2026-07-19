@@ -54,6 +54,9 @@ async function signIn(email, password) {
 }
 
 async function signInWithGoogle() {
+  if (!GOOGLE_EXTENSION_CLIENT_ID) {
+    return { ok: false, error: "Google sign-in is not configured for this extension." };
+  }
   const redirectUri = chrome.identity.getRedirectURL();
   const authUrl = "https://accounts.google.com/o/oauth2/v2/auth"
     + `?client_id=${encodeURIComponent(GOOGLE_EXTENSION_CLIENT_ID)}`

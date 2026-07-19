@@ -17,6 +17,41 @@ const DEFAULTS = {
 
 importScripts("data/fr-lexicon-index.js");
 
+const WEB_APP_URL_PATTERN = "https://heliona203.github.io/language-toolkit-extension/*";
+
+// Static content scripts are injected only when a document loads. Inject the
+// bridge into already-open companion-app tabs too, so an Options-page sign-in
+// works immediately after installing/updating the extension rather than only
+// after the user manually reloads that tab.
+async function installWebAuthBridge(tabId, announceSessionChange = false) {
+  try {
+    await chrome.scripting.executeScript({
+      target: { tabId },
+      files: ["web-auth-bridge.js"]
+    });
+    if (announceSessionChange) {
+      await chrome.scripting.executeScript({
+        target: { tabId },
+        func: () => globalThis.__languageToolkitAuthBridgePostCurrentSession?.("AUTH_SESSION_CHANGED")
+      });
+    }
+  } catch {
+    // The tab may be navigating or Chrome may disallow injection into it.
+  }
+}
+
+async function installWebAuthBridges(announceSessionChange = false) {
+  const tabs = await chrome.tabs.query({ url: [WEB_APP_URL_PATTERN] });
+  await Promise.all(tabs.map(tab => installWebAuthBridge(tab.id, announceSessionChange)));
+}
+
+chrome.runtime.onInstalled.addListener(() => { installWebAuthBridges(); });
+chrome.runtime.onStartup.addListener(() => { installWebAuthBridges(); });
+
+chrome.storage.onChanged.addListener((changes, area) => {
+  if (area === "local" && changes.authSession) installWebAuthBridges(true);
+});
+
 chrome.commands.onCommand.addListener(async (command) => {
   if (command === "open_vocab_lookup") await openLookupForSelectedTerm();
   if (command === "save_selected_sentence") await saveSelectedSentenceForPendingTerm();

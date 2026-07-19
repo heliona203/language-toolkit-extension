@@ -13,16 +13,28 @@
    over instead. Once past that handshake, AUTH_SESSION_CHANGED reflects a
    real transition (sign-in or sign-out) and the web app mirrors it exactly. */
 (() => {
+  // This file is both a manifest content script and is injected into tabs that
+  // were already open when the extension started. Keep repeated injections
+  // from registering duplicate storage/message listeners.
+  if (globalThis.__languageToolkitAuthBridgeInstalled) return;
+  globalThis.__languageToolkitAuthBridgeInstalled = true;
+
   const AUTH_BRIDGE_SOURCE = "language-toolkit-extension";
 
   function postToPage(type, session) {
     window.postMessage({ source: AUTH_BRIDGE_SOURCE, type, session }, window.location.origin);
   }
 
-  async function sendCurrentSession() {
+  async function sendCurrentSession(type = "AUTH_SESSION_INITIAL") {
     const { authSession } = await chrome.storage.local.get({ authSession: null });
-    postToPage("AUTH_SESSION_INITIAL", authSession);
+    postToPage(type, authSession);
   }
+
+  // Used by the service worker after it injects this bridge into an already
+  // open tab in response to a real storage transition. An INITIAL null means
+  // "unknown extension state" during first contact; this explicit CHANGED
+  // null means the user actually signed out and must clear the page session.
+  globalThis.__languageToolkitAuthBridgePostCurrentSession = sendCurrentSession;
 
   window.addEventListener("message", (event) => {
     if (event.source !== window || event.origin !== window.location.origin) return;
