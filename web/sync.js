@@ -3,9 +3,32 @@
    instead of chrome.storage — kept as a near-duplicate rather than a shared
    module, matching this repo's existing style. */
 
-const FIRESTORE_BASE = `https://firestore.googleapis.com/v1/projects/${FIREBASE_PROJECT_ID}/databases/(default)/documents`;
-const AUTH_SIGNIN_URL = `https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=${FIREBASE_API_KEY}`;
-const AUTH_REFRESH_URL = `https://securetoken.googleapis.com/v1/token?key=${FIREBASE_API_KEY}`;
+let firebaseApiKey = FIREBASE_API_KEY;
+let firebaseProjectId = FIREBASE_PROJECT_ID;
+
+function firestoreBase() {
+  return `https://firestore.googleapis.com/v1/projects/${firebaseProjectId}/databases/(default)/documents`;
+}
+
+function authSignInUrl() {
+  return `https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=${firebaseApiKey}`;
+}
+
+function authRefreshUrl() {
+  return `https://securetoken.googleapis.com/v1/token?key=${firebaseApiKey}`;
+}
+
+function configureFirebase({ apiKey, projectId } = {}) {
+  // Firebase web API keys are intentionally public. Receiving these values
+  // from the signed-in extension lets the static companion page use the same
+  // project even when its checked-in configuration is left blank.
+  if (apiKey) firebaseApiKey = apiKey;
+  if (projectId) firebaseProjectId = projectId;
+}
+
+function isFirebaseConfigured() {
+  return Boolean(firebaseApiKey && firebaseProjectId);
+}
 
 const AUTH_SESSION_KEY = "languageToolkit.authSession";
 const DELETED_KEYS_KEY = "languageToolkit.deletedKeys";
@@ -32,7 +55,7 @@ function setSession(session) {
 async function signIn(email, password) {
   let res;
   try {
-    res = await fetch(AUTH_SIGNIN_URL, {
+    res = await fetch(authSignInUrl(), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ email, password, returnSecureToken: true })
@@ -57,7 +80,22 @@ async function signIn(email, password) {
 
 function requestGoogleAccessToken() {
   if (!GOOGLE_WEB_CLIENT_ID) {
-    return Promise.reject(new Error("Google sign-in is not configured for this web app."));
+    // The extension can safely run its Chrome OAuth flow for this tab. This
+    // avoids requiring a second web OAuth client in the static GitHub Pages build.
+    return new Promise((resolve, reject) => {
+      const timeout = setTimeout(() => reject(new Error("Google sign-in requires the extension or a web OAuth client.")), 3000);
+      const onResult = (event) => {
+        if (event.source !== window || event.origin !== window.location.origin) return;
+        const data = event.data;
+        if (!data || data.source !== AUTH_BRIDGE_SOURCE || data.type !== "EXTENSION_GOOGLE_SIGN_IN_RESULT") return;
+        window.removeEventListener("message", onResult);
+        clearTimeout(timeout);
+        if (data.session?.ok) resolve({ extensionResult: data.session });
+        else reject(new Error(data.session?.error || "Google sign-in failed."));
+      };
+      window.addEventListener("message", onResult);
+      window.postMessage({ source: AUTH_BRIDGE_SOURCE, type: "REQUEST_EXTENSION_GOOGLE_SIGN_IN" }, window.location.origin);
+    });
   }
   if (!globalThis.google?.accounts?.oauth2) {
     return Promise.reject(new Error("Google sign-in is still loading. Please try again."));
@@ -79,13 +117,17 @@ async function signInWithGoogle() {
   } catch (err) {
     return { ok: false, error: err.message };
   }
+  if (token?.extensionResult) {
+    if (token.extensionResult.ok && token.extensionResult.session) setSession(token.extensionResult.session);
+    return token.extensionResult;
+  }
   return exchangeGoogleToken(token);
 }
 
 async function exchangeGoogleToken(accessToken) {
   let res;
   try {
-    res = await fetch(`https://identitytoolkit.googleapis.com/v1/accounts:signInWithIdp?key=${FIREBASE_API_KEY}`, {
+    res = await fetch(`https://identitytoolkit.googleapis.com/v1/accounts:signInWithIdp?key=${firebaseApiKey}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -121,7 +163,7 @@ function signOut() {
 async function refreshIdToken(refreshToken) {
   let res;
   try {
-    res = await fetch(AUTH_REFRESH_URL, {
+    res = await fetch(authRefreshUrl(), {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
       body: `grant_type=refresh_token&refresh_token=${encodeURIComponent(refreshToken)}`
@@ -155,7 +197,7 @@ async function ensureFreshIdToken() {
 /* ---------------- Firestore REST ---------------- */
 
 function docPath(uid) {
-  return `${FIRESTORE_BASE}/vocab_data/${uid}`;
+  return `${firestoreBase()}/vocab_data/${uid}`;
 }
 
 function parseJsonField(field) {
@@ -315,6 +357,13 @@ function initAuthBridge(onSessionAdopted) {
     const data = event.data;
     if (!data || data.source !== AUTH_BRIDGE_SOURCE) return;
 
+    if (data.type === "AUTH_SYNC_CONFIG") {
+      configureFirebase(data.session);
+      const current = getSession();
+      if (current) onSessionAdopted?.(current);
+      return;
+    }
+
     if (data.type === "AUTH_SESSION_INITIAL") {
       const bridgedSession = data.session;
       const current = getSession();
@@ -345,6 +394,7 @@ function initAuthBridge(onSessionAdopted) {
 /* ---------------- orchestration ---------------- */
 
 async function syncNow() {
+  if (!isFirebaseConfigured()) return { ok: false, error: "Sync is not configured. Open this page from the extension once, or add Firebase settings to web/firebase-config.js." };
   const session = await ensureFreshIdToken();
   if (!session) return { ok: false, error: "Not signed in." };
 
@@ -402,5 +452,5 @@ function schedulePush() {
 
 window.sync = {
   signIn, signInWithGoogle, signOut, getSession, syncNow, schedulePush,
-  recordTermTombstone, recordSentenceTombstone, getLastSyncedAt, initAuthBridge
+  recordTermTombstone, recordSentenceTombstone, getLastSyncedAt, initAuthBridge, configureFirebase
 };

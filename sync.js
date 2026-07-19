@@ -364,7 +364,7 @@ function schedulePush() {
   }, PUSH_DEBOUNCE_MS);
 }
 
-window.sync = {
+globalThis.sync = {
   signIn, signInWithGoogle, signOut, getSession, syncNow, schedulePush,
   recordTermTombstone, recordSentenceTombstone, getLastSyncedAt
 };

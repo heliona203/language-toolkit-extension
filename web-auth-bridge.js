@@ -30,6 +30,24 @@
     postToPage(type, authSession);
   }
 
+  async function sendSyncConfig() {
+    try {
+      const config = await chrome.runtime.sendMessage({ type: "LANGUAGE_TOOLKIT_GET_SYNC_CONFIG" });
+      if (config?.ok) postToPage("AUTH_SYNC_CONFIG", config);
+    } catch {
+      // The page remains usable without the extension bridge.
+    }
+  }
+
+  async function signInWithExtensionGoogle() {
+    try {
+      const result = await chrome.runtime.sendMessage({ type: "LANGUAGE_TOOLKIT_GOOGLE_SIGN_IN" });
+      postToPage("EXTENSION_GOOGLE_SIGN_IN_RESULT", result || { ok: false, error: "Google sign-in failed." });
+    } catch {
+      postToPage("EXTENSION_GOOGLE_SIGN_IN_RESULT", { ok: false, error: "Google sign-in requires the extension." });
+    }
+  }
+
   // Used by the service worker after it injects this bridge into an already
   // open tab in response to a real storage transition. An INITIAL null means
   // "unknown extension state" during first contact; this explicit CHANGED
@@ -42,7 +60,10 @@
     if (!data || data.source !== AUTH_BRIDGE_SOURCE) return;
 
     if (data.type === "REQUEST_AUTH_SESSION") {
+      sendSyncConfig();
       sendCurrentSession();
+    } else if (data.type === "REQUEST_EXTENSION_GOOGLE_SIGN_IN") {
+      signInWithExtensionGoogle();
     } else if (data.type === "SET_AUTH_SESSION") {
       if (data.session) chrome.storage.local.set({ authSession: data.session });
       else chrome.storage.local.remove("authSession");
